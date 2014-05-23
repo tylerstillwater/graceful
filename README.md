@@ -36,11 +36,14 @@ func main() {
 When Graceful is sent a SIGINT (ctrl+c), it:
 
 1. Disables keepalive connections.
-2. Starts a timer of `timeout` duration to give in-flight requests a chance to finish.
-3. Responds with `503 Service Unavailable` to any new requests.
-4. Closes the server when `timeout` has passed, terminating any remaining connections.
+2. Closes the listening socket, allowing another process to listen on that port immediately.
+3. Starts a timer of `timeout` duration to give active requests a chance to finish.
+4. When timeout expires, closes all active connections.
+5. Returns from the function, allowing the server to terminate.
 
 ## Notes
+
+If the `timeout` argument to `Run` is 0, the server never times out, allowing all active requests to complete.
 
 Graceful relies on functionality in [Go 1.3](http://tip.golang.org/doc/go1.3) which has not yet been released. If you wish to use it, you
 must [install the beta](https://code.google.com/p/go/wiki/Downloads) of Go 1.3. Once 1.3 is released, this note will be removed.

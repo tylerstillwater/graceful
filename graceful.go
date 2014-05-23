@@ -7,40 +7,22 @@ import (
 	"os"
 	"os/signal"
 	"time"
-
-	"github.com/codegangsta/negroni"
 )
-
-type graceful struct {
-	closing bool
-	timeout time.Duration
-}
-
-// ServeHTTP checks to see if we are in a closing state. If we are, it responds with a 503.
-// If not, it simply moves on to the next handler.
-func (g *graceful) ServeHTTP(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
-	if g.closing {
-		rw.WriteHeader(http.StatusServiceUnavailable)
-	} else {
-		next(rw, r)
-	}
-}
-
-// c is defined here to facilitate testing
-var c = make(chan os.Signal, 1)
 
 // Run executes negroni.Run with graceful shutdown enabled.
 //
-// timeout is the duration to wait until killing in-flight requests and stopping the server.
-func Run(addr string, timeout time.Duration, handler http.Handler) {
+// timeout is the duration to wait until killing active requests and stopping the server.
+// If timeout is 0, the server never times out. It waits for all active requests to finish.
+func Run(addr string, timeout time.Duration, n http.Handler) {
+	run(addr, timeout, n, make(chan os.Signal, 1))
+}
+
+func run(addr string, timeout time.Duration, n http.Handler, c chan os.Signal) {
 	logger := log.New(os.Stdout, "[graceful] ", 0)
-
-	// Inject our graceful shutdown middleware at the top of the stack
-	gracefulHandler := &graceful{closing: false, timeout: timeout}
-
-	n := negroni.New()
-	n.Use(gracefulHandler)
-	n.UseHandler(handler)
+	add := make(chan net.Conn)
+	remove := make(chan net.Conn)
+	active := make(chan int)
+	connections := map[net.Conn]struct{}{}
 
 	// Create the server and listener so we can control their lifetime
 	server := &http.Server{Addr: addr, Handler: n}
@@ -52,16 +34,68 @@ func Run(addr string, timeout time.Duration, handler http.Handler) {
 		logger.Fatal(err)
 	}
 
+	server.ConnState = func(conn net.Conn, state http.ConnState) {
+		switch state {
+		case http.StateActive:
+			add <- conn
+		case http.StateClosed, http.StateIdle:
+			remove <- conn
+		}
+	}
+
+	go func() {
+		for {
+			select {
+			case conn := <-add:
+				connections[conn] = struct{}{}
+				count := len(connections)
+				go func() {
+					active <- count
+				}()
+			case conn := <-remove:
+				delete(connections, conn)
+				count := len(connections)
+				go func() {
+					active <- count
+				}()
+			}
+		}
+	}()
+
 	// Set up the interrupt catch
 	signal.Notify(c, os.Interrupt)
 	go func() {
 		for _ = range c {
-			gracefulHandler.closing = true
-			time.Sleep(timeout)
+			server.SetKeepAlivesEnabled(false)
 			listener.Close()
+			signal.Stop(c)
+			close(c)
 		}
 	}()
 
 	server.Serve(listener)
+
+	if timeout > 0 {
+		kill := time.NewTimer(timeout)
+		for {
+			select {
+			case count := <-active:
+				if count == 0 {
+					return
+				}
+			case <-kill.C:
+				for k := range connections {
+					k.Close()
+				}
+				return
+			}
+		}
+	} else {
+		for count := range active {
+			if count == 0 {
+				return
+			}
+		}
+	}
 
 }
