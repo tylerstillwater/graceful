@@ -32,15 +32,15 @@ var c = make(chan os.Signal, 1)
 // Run executes negroni.Run with graceful shutdown enabled.
 //
 // timeout is the duration to wait until killing in-flight requests and stopping the server.
-func Run(addr string, timeout time.Duration, toRun *negroni.Negroni) {
-	logger := log.New(os.Stdout, "[negroni] ", 0)
+func Run(addr string, timeout time.Duration, handler http.Handler) {
+	logger := log.New(os.Stdout, "[graceful] ", 0)
 
 	// Inject our graceful shutdown middleware at the top of the stack
 	gracefulHandler := &graceful{closing: false, timeout: timeout}
 
 	n := negroni.New()
 	n.Use(gracefulHandler)
-	n.UseHandler(toRun)
+	n.UseHandler(handler)
 
 	// Create the server and listener so we can control their lifetime
 	server := &http.Server{Addr: addr, Handler: n}
