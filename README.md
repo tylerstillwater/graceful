@@ -1,4 +1,4 @@
-graceful
+graceful [![GoDoc](https://godoc.org/github.com/stretchr/graceful?status.png)](http://godoc.org/github.com/stretchr/graceful)
 ========
 
 Graceful is a Go package enabling graceful shutdown of [Negroni](https://github.com/codegangsta/negroni) servers.
@@ -45,5 +45,3 @@ When Graceful is sent a SIGINT (ctrl+c), it:
 Graceful relies on functionality in [Go 1.3](http://tip.golang.org/doc/go1.3) which has not yet been released. If you wish to use it, you
 must [install the beta](https://code.google.com/p/go/wiki/Downloads) of Go 1.3. Once 1.3 is released, this note will be removed.
 
-
-Please see the [Graceful Documentation](https://godoc.org/github.com/stretchr/graceful) on godoc for more information.
