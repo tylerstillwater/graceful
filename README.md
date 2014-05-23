@@ -27,7 +27,7 @@ func main() {
   n := negroni.Classic()
   n.UseHandler(mux)
   //n.Run(":3000")
-  graceful.run(":3001",10*time.Second,n)
+  graceful.Run(":3001",10*time.Second,n)
 }
 ```
 
