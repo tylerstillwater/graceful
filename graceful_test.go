@@ -143,3 +143,25 @@ func TestGracefulRunDoesntTimeOut(t *testing.T) {
 	wg.Wait()
 
 }
+
+func TestGracefulRunNoRequests(t *testing.T) {
+	c := make(chan os.Signal, 1)
+	n := negroni.New()
+	n.Use(negroni.HandlerFunc(func(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+		time.Sleep(killTime * time.Duration(2.0))
+		rw.WriteHeader(http.StatusOK)
+	}))
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		run(":3000", 0, n, c)
+		wg.Done()
+	}()
+
+	c <- os.Interrupt
+
+	wg.Wait()
+
+}

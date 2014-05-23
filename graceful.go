@@ -91,11 +91,15 @@ func run(addr string, timeout time.Duration, n http.Handler, c chan os.Signal) {
 			}
 		}
 	} else {
-		for count := range active {
-			if count == 0 {
+		for {
+			select {
+			case count := <-active:
+				if count == 0 {
+					return
+				}
+			default:
 				return
 			}
 		}
 	}
-
 }
