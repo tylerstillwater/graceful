@@ -3,6 +3,8 @@ graceful
 
 Graceful is a Go package enabling graceful shutdown of [Negroni](https://github.com/codegangsta/negroni) servers.
 
+[![wercker status](https://app.wercker.com/status/2729ba763abf87695a17547e0f7af4a4/m "wercker status")](https://app.wercker.com/project/bykey/2729ba763abf87695a17547e0f7af4a4)
+
 ## Usage
 
 Usage of Graceful is simple. Simply create your [Negroni](https://github.com/codegangsta/negroni) stack as usual, then call
