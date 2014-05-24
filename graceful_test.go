@@ -10,8 +10,6 @@ import (
 	"syscall"
 	"testing"
 	"time"
-
-	"github.com/codegangsta/negroni"
 )
 
 var killTime = 50 * time.Millisecond
@@ -44,17 +42,17 @@ func runQuery(t *testing.T, expected int, shouldErr bool, wg *sync.WaitGroup) {
 
 func TestGracefulRun(t *testing.T) {
 	c := make(chan os.Signal, 1)
-	n := negroni.New()
-	n.Use(negroni.HandlerFunc(func(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
 		time.Sleep(killTime / time.Duration(2.0))
 		rw.WriteHeader(http.StatusOK)
-	}))
+	})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
 	go func() {
-		run(":3000", killTime, n, c)
+		run(":3000", killTime, mux, c)
 		wg.Done()
 	}()
 
@@ -78,17 +76,17 @@ func TestGracefulRun(t *testing.T) {
 
 func TestGracefulRunTimesOut(t *testing.T) {
 	c := make(chan os.Signal, 1)
-	n := negroni.New()
-	n.Use(negroni.HandlerFunc(func(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
 		time.Sleep(killTime * time.Duration(10.0))
 		rw.WriteHeader(http.StatusOK)
-	}))
+	})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
 	go func() {
-		run(":3000", killTime, n, c)
+		run(":3000", killTime, mux, c)
 		wg.Done()
 	}()
 
@@ -112,17 +110,17 @@ func TestGracefulRunTimesOut(t *testing.T) {
 
 func TestGracefulRunDoesntTimeOut(t *testing.T) {
 	c := make(chan os.Signal, 1)
-	n := negroni.New()
-	n.Use(negroni.HandlerFunc(func(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
 		time.Sleep(killTime * time.Duration(2.0))
 		rw.WriteHeader(http.StatusOK)
-	}))
+	})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
 	go func() {
-		run(":3000", 0, n, c)
+		run(":3000", 0, mux, c)
 		wg.Done()
 	}()
 
@@ -146,17 +144,17 @@ func TestGracefulRunDoesntTimeOut(t *testing.T) {
 
 func TestGracefulRunNoRequests(t *testing.T) {
 	c := make(chan os.Signal, 1)
-	n := negroni.New()
-	n.Use(negroni.HandlerFunc(func(rw http.ResponseWriter, r *http.Request, next http.HandlerFunc) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
 		time.Sleep(killTime * time.Duration(2.0))
 		rw.WriteHeader(http.StatusOK)
-	}))
+	})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
 	go func() {
-		run(":3000", 0, n, c)
+		run(":3000", 0, mux, c)
 		wg.Done()
 	}()
 
