@@ -1,14 +1,31 @@
-graceful [![GoDoc](https://godoc.org/github.com/stretchr/graceful?status.png)](http://godoc.org/github.com/stretchr/graceful)
+graceful [![GoDoc](https://godoc.org/github.com/stretchr/graceful?status.png)](http://godoc.org/github.com/stretchr/graceful) [![wercker status](https://app.wercker.com/status/2729ba763abf87695a17547e0f7af4a4/s "wercker status")](https://app.wercker.com/project/bykey/2729ba763abf87695a17547e0f7af4a4)
 ========
 
-Graceful is a Go package enabling graceful shutdown of [Negroni](https://github.com/codegangsta/negroni) servers.
-
-[![wercker status](https://app.wercker.com/status/2729ba763abf87695a17547e0f7af4a4/m "wercker status")](https://app.wercker.com/project/bykey/2729ba763abf87695a17547e0f7af4a4)
+Graceful is a Go package enabling graceful shutdown of http.Handler servers.
 
 ## Usage
 
-Usage of Graceful is simple. Simply create your [Negroni](https://github.com/codegangsta/negroni) stack as usual, then call
-the `Run` function provided by graceful instead of the `Run` function provided by Negroni:
+Usage of Graceful is simple. Create your http.Handler and pass it to the `Run` function:
+
+```go
+
+import (
+  "github.com/stretchr/graceful"
+  "net/http"
+  "fmt"
+)
+
+func main() {
+  mux := http.NewServeMux()
+  mux.HandleFunc("/", func(w http.ResponseWriter, req *http.Request) {
+    fmt.Fprintf(w, "Welcome to the home page!")
+  })
+
+  graceful.Run(":3001",10*time.Second,mux)
+}
+```
+
+ Another example, using [Negroni](https://github.com/codegangsta/negroni), functions in much the same manner:
 
 ```go
 package main
@@ -32,6 +49,8 @@ func main() {
   graceful.Run(":3001",10*time.Second,n)
 }
 ```
+
+
 
 When Graceful is sent a SIGINT (ctrl+c), it:
 
