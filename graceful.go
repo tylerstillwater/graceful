@@ -14,11 +14,14 @@ import (
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
 func Run(addr string, timeout time.Duration, n http.Handler) {
-	run(addr, timeout, n, make(chan os.Signal, 1))
+	err := run(addr, timeout, n, make(chan os.Signal, 1))
+	if err != nil {
+		logger := log.New(os.Stdout, "[graceful] ", 0)
+		logger.Fatal(err)
+	}
 }
 
-func run(addr string, timeout time.Duration, n http.Handler, c chan os.Signal) {
-	logger := log.New(os.Stdout, "[graceful] ", 0)
+func run(addr string, timeout time.Duration, n http.Handler, c chan os.Signal) error {
 	add := make(chan net.Conn)
 	remove := make(chan net.Conn)
 	stop := make(chan chan bool)
@@ -32,7 +35,7 @@ func run(addr string, timeout time.Duration, n http.Handler, c chan os.Signal) {
 	}
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		logger.Fatal(err)
+		return err
 	}
 
 	server.ConnState = func(conn net.Conn, state http.ConnState) {
@@ -81,7 +84,7 @@ func run(addr string, timeout time.Duration, n http.Handler, c chan os.Signal) {
 		}
 	}()
 
-	server.Serve(listener)
+	err = server.Serve(listener)
 
 	done := make(chan bool)
 	stop <- done
@@ -95,4 +98,5 @@ func run(addr string, timeout time.Duration, n http.Handler, c chan os.Signal) {
 	} else {
 		<-done
 	}
+	return err
 }
