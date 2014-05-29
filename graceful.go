@@ -21,8 +21,8 @@ func run(addr string, timeout time.Duration, n http.Handler, c chan os.Signal) {
 	logger := log.New(os.Stdout, "[graceful] ", 0)
 	add := make(chan net.Conn)
 	remove := make(chan net.Conn)
-	stop := make(chan chan bool)
-	kill := make(chan bool)
+	stop := make(chan chan struct{})
+	kill := make(chan struct{})
 	connections := map[net.Conn]struct{}{}
 
 	// Create the server and listener so we can control their lifetime
@@ -45,7 +45,7 @@ func run(addr string, timeout time.Duration, n http.Handler, c chan os.Signal) {
 	}
 
 	go func() {
-		var done chan bool
+		var done chan struct{}
 		for {
 			select {
 			case conn := <-add:
@@ -53,12 +53,12 @@ func run(addr string, timeout time.Duration, n http.Handler, c chan os.Signal) {
 			case conn := <-remove:
 				delete(connections, conn)
 				if done != nil && len(connections) == 0 {
-					done <- true
+					done <- struct{}{}
 					return
 				}
 			case done = <-stop:
 				if len(connections) == 0 {
-					done <- true
+					done <- struct{}{}
 					return
 				}
 			case <-kill:
@@ -83,14 +83,14 @@ func run(addr string, timeout time.Duration, n http.Handler, c chan os.Signal) {
 
 	server.Serve(listener)
 
-	done := make(chan bool)
+	done := make(chan struct{})
 	stop <- done
 
 	if timeout > 0 {
 		select {
 		case <-done:
 		case <-time.After(timeout):
-			kill <- true
+			kill <- struct{}{}
 		}
 	} else {
 		<-done
