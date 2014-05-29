@@ -40,19 +40,28 @@ func runQuery(t *testing.T, expected int, shouldErr bool, wg *sync.WaitGroup) {
 	}
 }
 
-func TestGracefulRun(t *testing.T) {
-	c := make(chan os.Signal, 1)
+func runServer(timeout, sleep time.Duration, c chan os.Signal) error {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
-		time.Sleep(killTime / time.Duration(2.0))
+		time.Sleep(sleep)
 		rw.WriteHeader(http.StatusOK)
 	})
+	srv := &http.Server{Addr: ":3000", Handler: mux}
+	l, err := net.Listen("tcp", ":3000")
+	if err != nil {
+		return err
+	}
+	return run(srv, l, timeout, c)
+}
+
+func TestGracefulRun(t *testing.T) {
+	c := make(chan os.Signal, 1)
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
 	go func() {
-		run(":3000", killTime, mux, c)
+		runServer(killTime, killTime/2, c)
 		wg.Done()
 	}()
 
@@ -76,17 +85,12 @@ func TestGracefulRun(t *testing.T) {
 
 func TestGracefulRunTimesOut(t *testing.T) {
 	c := make(chan os.Signal, 1)
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
-		time.Sleep(killTime * time.Duration(10.0))
-		rw.WriteHeader(http.StatusOK)
-	})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
 	go func() {
-		run(":3000", killTime, mux, c)
+		runServer(killTime, killTime*10, c)
 		wg.Done()
 	}()
 
@@ -110,17 +114,12 @@ func TestGracefulRunTimesOut(t *testing.T) {
 
 func TestGracefulRunDoesntTimeOut(t *testing.T) {
 	c := make(chan os.Signal, 1)
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
-		time.Sleep(killTime * time.Duration(2.0))
-		rw.WriteHeader(http.StatusOK)
-	})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
 	go func() {
-		run(":3000", 0, mux, c)
+		runServer(0, killTime*2, c)
 		wg.Done()
 	}()
 
@@ -144,17 +143,12 @@ func TestGracefulRunDoesntTimeOut(t *testing.T) {
 
 func TestGracefulRunNoRequests(t *testing.T) {
 	c := make(chan os.Signal, 1)
-	mux := http.NewServeMux()
-	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
-		time.Sleep(killTime * time.Duration(2.0))
-		rw.WriteHeader(http.StatusOK)
-	})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
 
 	go func() {
-		run(":3000", 0, mux, c)
+		runServer(0, killTime*2, c)
 		wg.Done()
 	}()
 

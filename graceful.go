@@ -1,6 +1,7 @@
 package graceful
 
 import (
+	"crypto/tls"
 	"log"
 	"net"
 	"net/http"
@@ -9,35 +10,83 @@ import (
 	"time"
 )
 
-// Run executes negroni.Run with graceful shutdown enabled.
+// Run serves the http.Handler with graceful shutdown enabled.
 //
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
 func Run(addr string, timeout time.Duration, n http.Handler) {
-	err := run(addr, timeout, n, make(chan os.Signal, 1))
+	srv := &http.Server{Addr: addr, Handler: n}
+	err := ListenAndServe(srv, timeout)
 	if err != nil {
 		logger := log.New(os.Stdout, "[graceful] ", 0)
 		logger.Fatal(err)
 	}
 }
 
-func run(addr string, timeout time.Duration, n http.Handler, c chan os.Signal) error {
-	add := make(chan net.Conn)
-	remove := make(chan net.Conn)
-	stop := make(chan chan bool)
-	kill := make(chan bool)
-	connections := map[net.Conn]struct{}{}
-
-	// Create the server and listener so we can control their lifetime
-	server := &http.Server{Addr: addr, Handler: n}
+// ListenAndServe is equivalent to http.Server.ListenAndServe with graceful shutdown enabled.
+//
+// timeout is the duration to wait until killing active requests and stopping the server.
+// If timeout is 0, the server never times out. It waits for all active requests to finish.
+func ListenAndServe(srv *http.Server, timeout time.Duration) error {
+	// Create the listener so we can control their lifetime
+	addr := srv.Addr
 	if addr == "" {
 		addr = ":http"
 	}
-	listener, err := net.Listen("tcp", addr)
+	l, err := net.Listen("tcp", addr)
 	if err != nil {
 		return err
 	}
 
+	return run(srv, l, timeout, make(chan os.Signal, 1))
+}
+
+// ListenAndServeTLS is equivalent to http.Server.ListenAndServeTLS with graceful shutdown enabled.
+//
+// timeout is the duration to wait until killing active requests and stopping the server.
+// If timeout is 0, the server never times out. It waits for all active requests to finish.
+func ListenAndServeTLS(srv *http.Server, certFile, keyFile string, timeout time.Duration) error {
+	// Create the listener so we can control their lifetime
+	addr := srv.Addr
+	if addr == "" {
+		addr = ":https"
+	}
+	config := &tls.Config{}
+	if srv.TLSConfig != nil {
+		*config = *srv.TLSConfig
+	}
+	if config.NextProtos == nil {
+		config.NextProtos = []string{"http/1.1"}
+	}
+
+	var err error
+	config.Certificates = make([]tls.Certificate, 1)
+	config.Certificates[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+	if err != nil {
+		return err
+	}
+
+	conn, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	tlsListener := tls.NewListener(conn, config)
+	return run(srv, tlsListener, timeout, make(chan os.Signal, 1))
+}
+
+// Serve is equivalent to http.Server.Serve with graceful shutdown enabled.
+//
+// timeout is the duration to wait until killing active requests and stopping the server.
+// If timeout is 0, the server never times out. It waits for all active requests to finish.
+func Serve(srv *http.Server, l net.Listener, timeout time.Duration) error {
+	return run(srv, l, timeout, make(chan os.Signal, 1))
+}
+
+func run(server *http.Server, listener net.Listener, timeout time.Duration, c chan os.Signal) error {
+	// Track connection state
+	add := make(chan net.Conn)
+	remove := make(chan net.Conn)
 	server.ConnState = func(conn net.Conn, state http.ConnState) {
 		switch state {
 		case http.StateActive:
@@ -47,7 +96,11 @@ func run(addr string, timeout time.Duration, n http.Handler, c chan os.Signal) e
 		}
 	}
 
+	// Manage open connections
+	stop := make(chan chan bool)
+	kill := make(chan bool)
 	go func() {
+		connections := map[net.Conn]struct{}{}
 		var done chan bool
 		for {
 			select {
@@ -84,8 +137,10 @@ func run(addr string, timeout time.Duration, n http.Handler, c chan os.Signal) e
 		}
 	}()
 
-	err = server.Serve(listener)
+	// Serve with graceful listener
+	err := server.Serve(listener)
 
+	// Request done notification
 	done := make(chan bool)
 	stop <- done
 
