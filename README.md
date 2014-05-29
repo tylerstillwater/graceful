@@ -3,6 +3,8 @@ graceful [![GoDoc](https://godoc.org/github.com/stretchr/graceful?status.png)](h
 
 Graceful is a Go package enabling graceful shutdown of http.Handler servers.
 
+If you would like to discuss Graceful, or any of our other open source projects, please join our [HipChat Open Source Channel](http://www.hipchat.com/gXWgwTtX2)
+
 ## Usage
 
 Usage of Graceful is simple. Create your http.Handler and pass it to the `Run` function:
