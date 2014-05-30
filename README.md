@@ -52,6 +52,7 @@ func main() {
 }
 ```
 
+In addition to Run there are the http.Server counterparts ListenAndServe, ListenAndServeTLS and Serve, these allow to configure https, custom timeouts and error handling.
 
 
 When Graceful is sent a SIGINT (ctrl+c), it:
