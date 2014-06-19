@@ -1,7 +1,7 @@
 graceful [![GoDoc](https://godoc.org/github.com/stretchr/graceful?status.png)](http://godoc.org/github.com/stretchr/graceful) [![wercker status](https://app.wercker.com/status/2729ba763abf87695a17547e0f7af4a4/s "wercker status")](https://app.wercker.com/project/bykey/2729ba763abf87695a17547e0f7af4a4)
 ========
 
-Graceful is a Go package enabling graceful shutdown of http.Handler servers.
+Graceful is a Go 1.3+ package enabling graceful shutdown of http.Handler servers.
 
 ## Usage
 
@@ -64,7 +64,3 @@ When Graceful is sent a SIGINT (ctrl+c), it:
 ## Notes
 
 If the `timeout` argument to `Run` is 0, the server never times out, allowing all active requests to complete.
-
-Graceful relies on functionality in [Go 1.3](http://tip.golang.org/doc/go1.3) which has not yet been released. If you wish to use it, you
-must [install the beta](https://code.google.com/p/go/wiki/Downloads) of Go 1.3. Once 1.3 is released, this note will be removed.
-
