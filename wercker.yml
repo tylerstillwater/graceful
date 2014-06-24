@@ -1,1 +1,1 @@
-box: tylerb/golang@1.3.2
+box: wercker/box-golang
