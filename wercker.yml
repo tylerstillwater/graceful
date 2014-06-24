@@ -1,1 +1,1 @@
-box: wercker/box-golang
+box: wercker/golang
