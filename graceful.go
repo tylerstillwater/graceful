@@ -127,7 +127,7 @@ func run(server *http.Server, listener net.Listener, timeout time.Duration, c ch
 	}()
 
 	// Set up the interrupt catch
-	signal.Notify(c, os.Interrupt)
+	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		for _ = range c {
 			server.SetKeepAlivesEnabled(false)
