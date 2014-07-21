@@ -63,6 +63,22 @@ func runServer(timeout, sleep time.Duration, c chan os.Signal) error {
 	return srv.Serve(l)
 }
 
+func launchTestQueries(t *testing.T, wg *sync.WaitGroup, c chan os.Signal) {
+	for i := 0; i < 8; i++ {
+		go runQuery(t, http.StatusOK, false, wg)
+	}
+
+	time.Sleep(10 * time.Millisecond)
+	c <- os.Interrupt
+	time.Sleep(10 * time.Millisecond)
+
+	for i := 0; i < 8; i++ {
+		go runQuery(t, 0, true, wg)
+	}
+
+	wg.Done()
+}
+
 func TestGracefulRun(t *testing.T) {
 	c := make(chan os.Signal, 1)
 
@@ -75,21 +91,8 @@ func TestGracefulRun(t *testing.T) {
 	}()
 
 	wg.Add(1)
-	go func() {
-		for i := 0; i < 8; i++ {
-			go runQuery(t, http.StatusOK, false, &wg)
-		}
-		time.Sleep(10 * time.Millisecond)
-		c <- os.Interrupt
-		time.Sleep(10 * time.Millisecond)
-		for i := 0; i < 8; i++ {
-			go runQuery(t, 0, true, &wg)
-		}
-		wg.Done()
-	}()
-
+	go launchTestQueries(t, &wg, c)
 	wg.Wait()
-
 }
 
 func TestGracefulRunTimesOut(t *testing.T) {
@@ -133,21 +136,8 @@ func TestGracefulRunDoesntTimeOut(t *testing.T) {
 	}()
 
 	wg.Add(1)
-	go func() {
-		for i := 0; i < 8; i++ {
-			go runQuery(t, http.StatusOK, false, &wg)
-		}
-		time.Sleep(10 * time.Millisecond)
-		c <- os.Interrupt
-		time.Sleep(10 * time.Millisecond)
-		for i := 0; i < 8; i++ {
-			go runQuery(t, 0, true, &wg)
-		}
-		wg.Done()
-	}()
-
+	go launchTestQueries(t, &wg, c)
 	wg.Wait()
-
 }
 
 func TestGracefulRunNoRequests(t *testing.T) {
@@ -169,15 +159,14 @@ func TestGracefulRunNoRequests(t *testing.T) {
 
 func TestGracefulForwardsConnState(t *testing.T) {
 	c := make(chan os.Signal, 1)
-
-	var wg sync.WaitGroup
-	wg.Add(1)
-
 	states := make(map[http.ConnState]int)
 
 	connState := func(conn net.Conn, state http.ConnState) {
 		states[state]++
 	}
+
+	var wg sync.WaitGroup
+	wg.Add(1)
 
 	go func() {
 		server, l, _ := createListener(killTime / 2)
@@ -193,19 +182,7 @@ func TestGracefulForwardsConnState(t *testing.T) {
 	}()
 
 	wg.Add(1)
-	go func() {
-		for i := 0; i < 8; i++ {
-			go runQuery(t, http.StatusOK, false, &wg)
-		}
-		time.Sleep(10 * time.Millisecond)
-		c <- os.Interrupt
-		time.Sleep(10 * time.Millisecond)
-		for i := 0; i < 8; i++ {
-			go runQuery(t, 0, true, &wg)
-		}
-		wg.Done()
-	}()
-
+	go launchTestQueries(t, &wg, c)
 	wg.Wait()
 
 	expected := map[http.ConnState]int{
