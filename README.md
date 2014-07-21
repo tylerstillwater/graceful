@@ -53,7 +53,7 @@ In addition to Run there are the http.Server counterparts ListenAndServe, Listen
 Graceful may also be used by instantiating its Server type directly, which embeds an http.Server:
 
 ```go
-mux := #...
+mux := // ...
 
 srv := &graceful.Server{
   Timeout: 10 * time.Second,
@@ -70,7 +70,7 @@ srv.ListenAndServe()
 This form allows you to set the ConnState callback, which works in the same way as in http.Server:
 
 ```go
-mux := #...
+mux := // ...
 
 srv := &graceful.Server{
   Timeout: 10 * time.Second,
