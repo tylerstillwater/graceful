@@ -11,7 +11,7 @@ import (
 	"time"
 )
 
-// Server wraps an http.Server with graceful methods.
+// Server wraps an http.Server with graceful connection handling.
 // It may be used directly in the same way as http.Server, or may
 // be constructed with the global functions in this package.
 type Server struct {
@@ -50,7 +50,7 @@ func Run(addr string, timeout time.Duration, n http.Handler) {
 	}
 }
 
-// ListenAndServe is equivalent to http.ListenAndServe with graceful shutdown enabled.
+// ListenAndServe is equivalent to http.Server.ListenAndServe with graceful shutdown enabled.
 //
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
@@ -74,7 +74,7 @@ func (srv *Server) ListenAndServe() error {
 	return srv.Serve(l)
 }
 
-// ListenAndServeTLS is equivalent to http.ListenAndServeTLS with graceful shutdown enabled.
+// ListenAndServeTLS is equivalent to http.Server.ListenAndServeTLS with graceful shutdown enabled.
 //
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
@@ -110,7 +110,7 @@ func ListenAndServeTLS(server *http.Server, certFile, keyFile string, timeout ti
 	return srv.Serve(tlsListener)
 }
 
-// Serve is equivalent to http.Serve with graceful shutdown enabled.
+// Serve is equivalent to http.Server.Serve with graceful shutdown enabled.
 //
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
