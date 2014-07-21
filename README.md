@@ -8,7 +8,6 @@ Graceful is a Go 1.3+ package enabling graceful shutdown of http.Handler servers
 Usage of Graceful is simple. Create your http.Handler and pass it to the `Run` function:
 
 ```go
-
 import (
   "github.com/stretchr/graceful"
   "net/http"
@@ -25,7 +24,7 @@ func main() {
 }
 ```
 
- Another example, using [Negroni](https://github.com/codegangsta/negroni), functions in much the same manner:
+Another example, using [Negroni](https://github.com/codegangsta/negroni), functions in much the same manner:
 
 ```go
 package main
@@ -50,7 +49,7 @@ func main() {
 }
 ```
 
-In addition to Run there are the http.Server counterparts ListenAndServe, ListenAndServeTLS and Serve, which allow you to configure https, custom timeouts and error handling.
+In addition to Run there are the http.Server counterparts ListenAndServe, ListenAndServeTLS and Serve, which allow you to configure HTTPS, custom timeouts and error handling.
 Graceful may also be used by instantiating its Server type directly, which embeds an http.Server:
 
 ```go
@@ -68,9 +67,30 @@ srv := &graceful.Server{
 srv.ListenAndServe()
 ```
 
-This form allows you to set the ConnState callback, which works in the same way as in http.Server.
+This form allows you to set the ConnState callback, which works in the same way as in http.Server:
 
-When Graceful is sent a SIGINT (ctrl+c), it:
+```go
+mux := #...
+
+srv := &graceful.Server{
+  Timeout: 10 * time.Second,
+
+  ConnState: func(conn net.Conn, state http.ConnState) {
+    // conn has a new state
+  },
+
+  Server: &http.Server{
+    Addr: ":1234",
+    Handler: mux,
+  },
+}
+
+srv.ListenAndServe()
+```
+
+## Behaviour
+
+When Graceful is sent a SIGINT or SIGTERM (possibly from ^C or a kill command), it:
 
 1. Disables keepalive connections.
 2. Closes the listening socket, allowing another process to listen on that port immediately.
