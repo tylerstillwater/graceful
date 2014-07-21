@@ -50,8 +50,25 @@ func main() {
 }
 ```
 
-In addition to Run there are the http.Server counterparts ListenAndServe, ListenAndServeTLS and Serve, these allow to configure https, custom timeouts and error handling.
+In addition to Run there are the http.Server counterparts ListenAndServe, ListenAndServeTLS and Serve, which allow you to configure https, custom timeouts and error handling.
+Graceful may also be used by instantiating its Server type directly, which embeds an http.Server:
 
+```go
+mux := #...
+
+srv := &graceful.Server{
+  Timeout: 10 * time.Second,
+
+  Server: &http.Server{
+    Addr: ":1234",
+    Handler: mux,
+  },
+}
+
+srv.ListenAndServe()
+```
+
+This form allows you to set the ConnState callback, which works in the same way as in http.Server.
 
 When Graceful is sent a SIGINT (ctrl+c), it:
 
