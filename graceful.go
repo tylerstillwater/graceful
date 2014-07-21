@@ -11,9 +11,22 @@ import (
 	"time"
 )
 
+// Server wraps an http.Server with graceful methods.
+// It may be used directly in the same way as http.Server, or may
+// be constructed with the global functions in this package.
 type Server struct {
+	// Timeout is the duration to allow outstanding requests to survive
+	// before forcefully terminating them.
 	Timeout   time.Duration
+
+	// ConnState specifies an optional callback function that is
+	// called when a client connection changes state. This is a proxy
+	// to the underlying http.Server's ConnState, and the original
+	// must not be set directly.
 	ConnState func(net.Conn, http.ConnState)
+
+	// interrupt signals the listener to stop serving connections,
+	// and the server to shut down.
 	interrupt chan os.Signal
 
 	*http.Server
@@ -37,7 +50,7 @@ func Run(addr string, timeout time.Duration, n http.Handler) {
 	}
 }
 
-// ListenAndServe is equivalent to http.Server.ListenAndServe with graceful shutdown enabled.
+// ListenAndServe is equivalent to http.ListenAndServe with graceful shutdown enabled.
 //
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
@@ -46,6 +59,7 @@ func ListenAndServe(server *http.Server, timeout time.Duration) error {
 	return srv.ListenAndServe()
 }
 
+// ListenAndServe is equivalent to http.Server.ListenAndServe with graceful shutdown enabled.
 func (srv *Server) ListenAndServe() error {
 	// Create the listener so we can control their lifetime
 	addr := srv.Addr
@@ -60,7 +74,7 @@ func (srv *Server) ListenAndServe() error {
 	return srv.Serve(l)
 }
 
-// ListenAndServeTLS is equivalent to http.Server.ListenAndServeTLS with graceful shutdown enabled.
+// ListenAndServeTLS is equivalent to http.ListenAndServeTLS with graceful shutdown enabled.
 //
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
@@ -96,7 +110,7 @@ func ListenAndServeTLS(server *http.Server, certFile, keyFile string, timeout ti
 	return srv.Serve(tlsListener)
 }
 
-// Serve is equivalent to http.Server.Serve with graceful shutdown enabled.
+// Serve is equivalent to http.Serve with graceful shutdown enabled.
 //
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
@@ -105,6 +119,7 @@ func Serve(server *http.Server, l net.Listener, timeout time.Duration) error {
 	return srv.Serve(l)
 }
 
+// Serve is equivalent to http.Server.Serve with graceful shutdown enabled.
 func (srv *Server) Serve(listener net.Listener) error {
 	// Track connection state
 	add := make(chan net.Conn)
