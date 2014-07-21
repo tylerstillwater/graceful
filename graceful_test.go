@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"net/url"
 	"os"
+	"reflect"
 	"sync"
 	"syscall"
 	"testing"
@@ -40,7 +41,7 @@ func runQuery(t *testing.T, expected int, shouldErr bool, wg *sync.WaitGroup) {
 	}
 }
 
-func runServer(timeout, sleep time.Duration, c chan os.Signal) error {
+func createListener(sleep time.Duration) (*http.Server, net.Listener, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
 		time.Sleep(sleep)
@@ -49,6 +50,11 @@ func runServer(timeout, sleep time.Duration, c chan os.Signal) error {
 
 	server := &http.Server{Addr: ":3000", Handler: mux}
 	l, err := net.Listen("tcp", ":3000")
+	return server, l, err
+}
+
+func runServer(timeout, sleep time.Duration, c chan os.Signal) error {
+	server, l, err := createListener(sleep)
 	if err != nil {
 		return err
 	}
@@ -159,4 +165,56 @@ func TestGracefulRunNoRequests(t *testing.T) {
 
 	wg.Wait()
 
+}
+
+func TestGracefulForwardsConnState(t *testing.T) {
+	c := make(chan os.Signal, 1)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	states := make(map[http.ConnState]int)
+
+	connState := func(conn net.Conn, state http.ConnState) {
+		states[state]++
+	}
+
+	go func() {
+		server, l, _ := createListener(killTime / 2)
+		srv := &Server{
+			ConnState: connState,
+			Timeout:   killTime,
+			Server:    server,
+			interrupt: c,
+		}
+		srv.Serve(l)
+
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go func() {
+		for i := 0; i < 8; i++ {
+			go runQuery(t, http.StatusOK, false, &wg)
+		}
+		time.Sleep(10 * time.Millisecond)
+		c <- os.Interrupt
+		time.Sleep(10 * time.Millisecond)
+		for i := 0; i < 8; i++ {
+			go runQuery(t, 0, true, &wg)
+		}
+		wg.Done()
+	}()
+
+	wg.Wait()
+
+	expected := map[http.ConnState]int{
+		http.StateNew:    8,
+		http.StateActive: 8,
+		http.StateClosed: 8,
+	}
+
+	if !reflect.DeepEqual(states, expected) {
+		t.Errorf("Incorrect connection state tracking.\n  actual: %v\nexpected: %v\n", states, expected)
+	}
 }
