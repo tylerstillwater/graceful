@@ -11,15 +11,25 @@ import (
 	"time"
 )
 
+type Server struct {
+	Timeout   time.Duration
+	ConnState func(net.Conn, http.ConnState)
+	interrupt chan os.Signal
+
+	*http.Server
+}
+
 // Run serves the http.Handler with graceful shutdown enabled.
 //
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
 func Run(addr string, timeout time.Duration, n http.Handler) {
-	srv := &http.Server{Addr: addr, Handler: n}
-	err := ListenAndServe(srv, timeout)
+	srv := &Server{
+		Timeout: timeout,
+		Server:  &http.Server{Addr: addr, Handler: n},
+	}
 
-	if err != nil {
+	if err := srv.ListenAndServe(); err != nil {
 		if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
 			logger := log.New(os.Stdout, "[graceful] ", 0)
 			logger.Fatal(err)
@@ -31,7 +41,12 @@ func Run(addr string, timeout time.Duration, n http.Handler) {
 //
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
-func ListenAndServe(srv *http.Server, timeout time.Duration) error {
+func ListenAndServe(server *http.Server, timeout time.Duration) error {
+	srv := &Server{Timeout: timeout, Server: server}
+	return srv.ListenAndServe()
+}
+
+func (srv *Server) ListenAndServe() error {
 	// Create the listener so we can control their lifetime
 	addr := srv.Addr
 	if addr == "" {
@@ -42,19 +57,21 @@ func ListenAndServe(srv *http.Server, timeout time.Duration) error {
 		return err
 	}
 
-	return run(srv, l, timeout, make(chan os.Signal, 1))
+	return srv.Serve(l)
 }
 
 // ListenAndServeTLS is equivalent to http.Server.ListenAndServeTLS with graceful shutdown enabled.
 //
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
-func ListenAndServeTLS(srv *http.Server, certFile, keyFile string, timeout time.Duration) error {
-	// Create the listener so we can control their lifetime
+func ListenAndServeTLS(server *http.Server, certFile, keyFile string, timeout time.Duration) error {
+	// Create the listener ourselves so we can control its lifetime
+	srv := &Server{Timeout: timeout, Server: server}
 	addr := srv.Addr
 	if addr == "" {
 		addr = ":https"
 	}
+
 	config := &tls.Config{}
 	if srv.TLSConfig != nil {
 		*config = *srv.TLSConfig
@@ -76,27 +93,33 @@ func ListenAndServeTLS(srv *http.Server, certFile, keyFile string, timeout time.
 	}
 
 	tlsListener := tls.NewListener(conn, config)
-	return run(srv, tlsListener, timeout, make(chan os.Signal, 1))
+	return srv.Serve(tlsListener)
 }
 
 // Serve is equivalent to http.Server.Serve with graceful shutdown enabled.
 //
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
-func Serve(srv *http.Server, l net.Listener, timeout time.Duration) error {
-	return run(srv, l, timeout, make(chan os.Signal, 1))
+func Serve(server *http.Server, l net.Listener, timeout time.Duration) error {
+	srv := &Server{Timeout: timeout, Server: server}
+	return srv.Serve(l)
 }
 
-func run(server *http.Server, listener net.Listener, timeout time.Duration, c chan os.Signal) error {
+func (srv *Server) Serve(listener net.Listener) error {
 	// Track connection state
 	add := make(chan net.Conn)
 	remove := make(chan net.Conn)
-	server.ConnState = func(conn net.Conn, state http.ConnState) {
+
+	srv.Server.ConnState = func(conn net.Conn, state http.ConnState) {
 		switch state {
 		case http.StateActive:
 			add <- conn
 		case http.StateClosed, http.StateIdle:
 			remove <- conn
+		}
+
+		if hook := srv.ConnState; hook != nil {
+			hook(conn, state)
 		}
 	}
 
@@ -130,28 +153,32 @@ func run(server *http.Server, listener net.Listener, timeout time.Duration, c ch
 		}
 	}()
 
+	if srv.interrupt == nil {
+		srv.interrupt = make(chan os.Signal, 1)
+	}
+
 	// Set up the interrupt catch
-	signal.Notify(c, syscall.SIGINT, syscall.SIGTERM)
+	signal.Notify(srv.interrupt, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		for _ = range c {
-			server.SetKeepAlivesEnabled(false)
+		for _ = range srv.interrupt {
+			srv.SetKeepAlivesEnabled(false)
 			listener.Close()
-			signal.Stop(c)
-			close(c)
+			signal.Stop(srv.interrupt)
+			close(srv.interrupt)
 		}
 	}()
 
 	// Serve with graceful listener
-	err := server.Serve(listener)
+	err := srv.Server.Serve(listener)
 
 	// Request done notification
 	done := make(chan struct{})
 	stop <- done
 
-	if timeout > 0 {
+	if srv.Timeout > 0 {
 		select {
 		case <-done:
-		case <-time.After(timeout):
+		case <-time.After(srv.Timeout):
 			kill <- struct{}{}
 		}
 	} else {

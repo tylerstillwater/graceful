@@ -46,12 +46,15 @@ func runServer(timeout, sleep time.Duration, c chan os.Signal) error {
 		time.Sleep(sleep)
 		rw.WriteHeader(http.StatusOK)
 	})
-	srv := &http.Server{Addr: ":3000", Handler: mux}
+
+	server := &http.Server{Addr: ":3000", Handler: mux}
 	l, err := net.Listen("tcp", ":3000")
 	if err != nil {
 		return err
 	}
-	return run(srv, l, timeout, c)
+
+	srv := &Server{Timeout: timeout, Server: server, interrupt: c}
+	return srv.Serve(l)
 }
 
 func TestGracefulRun(t *testing.T) {
