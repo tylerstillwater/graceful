@@ -14,10 +14,17 @@ import (
 // Server wraps an http.Server with graceful connection handling.
 // It may be used directly in the same way as http.Server, or may
 // be constructed with the global functions in this package.
+//
+// Example:
+//	srv := &graceful.Server{
+//		Timeout: 5 * time.Second,
+//		Server: &http.Server{Addr: ":1234", Handler: handler},
+//	}
+//	srv.ListenAndServe()
 type Server struct {
 	// Timeout is the duration to allow outstanding requests to survive
 	// before forcefully terminating them.
-	Timeout   time.Duration
+	Timeout time.Duration
 
 	// ConnState specifies an optional callback function that is
 	// called when a client connection changes state. This is a proxy
