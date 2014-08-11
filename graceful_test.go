@@ -195,3 +195,47 @@ func TestGracefulForwardsConnState(t *testing.T) {
 		t.Errorf("Incorrect connection state tracking.\n  actual: %v\nexpected: %v\n", states, expected)
 	}
 }
+
+func TestGracefulExplicitStop(t *testing.T) {
+	server, l, err := createListener(1 * time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := &Server{Timeout: killTime, Server: server}
+
+	go func() {
+		go srv.Serve(l)
+		time.Sleep(10 * time.Millisecond)
+		srv.Stop(killTime)
+	}()
+
+	// block on the stopChan until the server has shut down
+	select {
+	case <-srv.StopChan():
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Timed out while waiting for explicit stop to complete")
+	}
+}
+
+func TestGracefulExplicitStopOverride(t *testing.T) {
+	server, l, err := createListener(1 * time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := &Server{Timeout: killTime, Server: server}
+
+	go func() {
+		go srv.Serve(l)
+		time.Sleep(10 * time.Millisecond)
+		srv.Stop(killTime / 2)
+	}()
+
+	// block on the stopChan until the server has shut down
+	select {
+	case <-srv.StopChan():
+	case <-time.After(killTime):
+		t.Fatal("Timed out while waiting for explicit stop to complete")
+	}
+}
