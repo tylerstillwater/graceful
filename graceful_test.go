@@ -53,23 +53,28 @@ func createListener(sleep time.Duration) (*http.Server, net.Listener, error) {
 	return server, l, err
 }
 
-func runServer(timeout, sleep time.Duration, c chan os.Signal) error {
+func runServer(timeout, sleep time.Duration, c chan os.Signal, c2 chan struct{}) error {
 	server, l, err := createListener(sleep)
 	if err != nil {
 		return err
 	}
 
-	srv := &Server{Timeout: timeout, Server: server, interrupt: c}
+	srv := &Server{Timeout: timeout, Server: server, Signal: c, Cancel: c2}
 	return srv.Serve(l)
 }
 
-func launchTestQueries(t *testing.T, wg *sync.WaitGroup, c chan os.Signal) {
+func launchTestQueries(t *testing.T, wg *sync.WaitGroup, c chan os.Signal, c2 chan struct{}) {
 	for i := 0; i < 8; i++ {
 		go runQuery(t, http.StatusOK, false, wg)
 	}
 
 	time.Sleep(10 * time.Millisecond)
-	c <- os.Interrupt
+	if c != nil {
+		c <- os.Interrupt
+	}
+	if c2 != nil {
+		close(c2)
+	}
 	time.Sleep(10 * time.Millisecond)
 
 	for i := 0; i < 8; i++ {
@@ -86,12 +91,45 @@ func TestGracefulRun(t *testing.T) {
 	wg.Add(1)
 
 	go func() {
-		runServer(killTime, killTime/2, c)
+		runServer(killTime, killTime/2, c, nil)
 		wg.Done()
 	}()
 
 	wg.Add(1)
-	go launchTestQueries(t, &wg, c)
+	go launchTestQueries(t, &wg, c, nil)
+	wg.Wait()
+}
+
+func TestGracefulRunWithCustomChannel(t *testing.T) {
+	c := make(chan struct{})
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		runServer(killTime, killTime/2, nil, c)
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go launchTestQueries(t, &wg, nil, c)
+	wg.Wait()
+}
+
+func TestGracefulRunWithBothChannels(t *testing.T) {
+	c := make(chan os.Signal, 1)
+	c2 := make(chan struct{})
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	go func() {
+		runServer(killTime, killTime/2, c, c2)
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go launchTestQueries(t, &wg, c, c2)
 	wg.Wait()
 }
 
@@ -102,7 +140,7 @@ func TestGracefulRunTimesOut(t *testing.T) {
 	wg.Add(1)
 
 	go func() {
-		runServer(killTime, killTime*10, c)
+		runServer(killTime, killTime*10, c, nil)
 		wg.Done()
 	}()
 
@@ -131,12 +169,12 @@ func TestGracefulRunDoesntTimeOut(t *testing.T) {
 	wg.Add(1)
 
 	go func() {
-		runServer(0, killTime*2, c)
+		runServer(0, killTime*2, c, nil)
 		wg.Done()
 	}()
 
 	wg.Add(1)
-	go launchTestQueries(t, &wg, c)
+	go launchTestQueries(t, &wg, c, nil)
 	wg.Wait()
 }
 
@@ -147,7 +185,7 @@ func TestGracefulRunNoRequests(t *testing.T) {
 	wg.Add(1)
 
 	go func() {
-		runServer(0, killTime*2, c)
+		runServer(0, killTime*2, c, nil)
 		wg.Done()
 	}()
 
@@ -174,7 +212,7 @@ func TestGracefulForwardsConnState(t *testing.T) {
 			ConnState: connState,
 			Timeout:   killTime,
 			Server:    server,
-			interrupt: c,
+			Signal:    c,
 		}
 		srv.Serve(l)
 
@@ -182,7 +220,7 @@ func TestGracefulForwardsConnState(t *testing.T) {
 	}()
 
 	wg.Add(1)
-	go launchTestQueries(t, &wg, c)
+	go launchTestQueries(t, &wg, c, nil)
 	wg.Wait()
 
 	expected := map[http.ConnState]int{
