@@ -197,6 +197,10 @@ func (srv *Server) Serve(listener net.Listener) error {
 		case <-cancel:
 		}
 
+		if sig != nil {
+			signal.Stop(sig)
+			close(sig)
+		}
 		srv.SetKeepAlivesEnabled(false)
 		listener.Close()
 	}()
