@@ -38,7 +38,7 @@ type Server struct {
 
 	// interrupts the listener to stop serving connections,
 	// and the server to shut down.
-	Cancel chan int
+	Cancel chan struct{}
 
 	*http.Server
 }
@@ -188,7 +188,7 @@ func (srv *Server) Serve(listener net.Listener) error {
 		signal.Notify(sig, syscall.SIGINT, syscall.SIGTERM)
 	}
 
-	stopListener := make(chan int, 1)
+	stopListener := make(chan struct{})
 
 	go func() {
 		select {
@@ -206,7 +206,7 @@ func (srv *Server) Serve(listener net.Listener) error {
 
 	// if Serve quits due to a non-cancellation signal (eg., binding to the same
 	// port simultaneously, etc.) the above go routine should be stopped.
-	stopListener <- 1
+	close(stopListener)
 
 	// Request done notification
 	done := make(chan struct{})

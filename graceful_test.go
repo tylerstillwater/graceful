@@ -53,7 +53,7 @@ func createListener(sleep time.Duration) (*http.Server, net.Listener, error) {
 	return server, l, err
 }
 
-func runServer(timeout, sleep time.Duration, c chan os.Signal, c2 chan int) error {
+func runServer(timeout, sleep time.Duration, c chan os.Signal, c2 chan struct{}) error {
 	server, l, err := createListener(sleep)
 	if err != nil {
 		return err
@@ -63,7 +63,7 @@ func runServer(timeout, sleep time.Duration, c chan os.Signal, c2 chan int) erro
 	return srv.Serve(l)
 }
 
-func launchTestQueries(t *testing.T, wg *sync.WaitGroup, c chan os.Signal, c2 chan int) {
+func launchTestQueries(t *testing.T, wg *sync.WaitGroup, c chan os.Signal, c2 chan struct{}) {
 	for i := 0; i < 8; i++ {
 		go runQuery(t, http.StatusOK, false, wg)
 	}
@@ -73,7 +73,7 @@ func launchTestQueries(t *testing.T, wg *sync.WaitGroup, c chan os.Signal, c2 ch
 		c <- os.Interrupt
 	}
 	if c2 != nil {
-		c2 <- 1
+		close(c2)
 	}
 	time.Sleep(10 * time.Millisecond)
 
@@ -101,7 +101,7 @@ func TestGracefulRun(t *testing.T) {
 }
 
 func TestGracefulRunWithCustomChannel(t *testing.T) {
-	c := make(chan int, 1)
+	c := make(chan struct{})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
@@ -118,7 +118,7 @@ func TestGracefulRunWithCustomChannel(t *testing.T) {
 
 func TestGracefulRunWithBothChannels(t *testing.T) {
 	c := make(chan os.Signal, 1)
-	c2 := make(chan int, 1)
+	c2 := make(chan struct{})
 
 	var wg sync.WaitGroup
 	wg.Add(1)
