@@ -12,6 +12,7 @@ import (
   "github.com/stretchr/graceful"
   "net/http"
   "fmt"
+  "time"
 )
 
 func main() {
@@ -20,7 +21,7 @@ func main() {
     fmt.Fprintf(w, "Welcome to the home page!")
   })
 
-  graceful.Run(":3001",10*time.Second,mux)
+  graceful.Run(":3001", time.Duration(10)*time.Second,mux)
 }
 ```
 
@@ -34,6 +35,7 @@ import (
   "github.com/stretchr/graceful"
   "net/http"
   "fmt"
+  "time"
 )
 
 func main() {
@@ -45,7 +47,7 @@ func main() {
   n := negroni.Classic()
   n.UseHandler(mux)
   //n.Run(":3000")
-  graceful.Run(":3001",10*time.Second,n)
+  graceful.Run(":3001", time.Duration(10)*time.Second,n)
 }
 ```
 
@@ -56,7 +58,7 @@ Graceful may also be used by instantiating its Server type directly, which embed
 mux := // ...
 
 srv := &graceful.Server{
-  Timeout: 10 * time.Second,
+  Timeout: time.Duration(10) * time.Second,
 
   Server: &http.Server{
     Addr: ":1234",
@@ -73,7 +75,7 @@ This form allows you to set the ConnState callback, which works in the same way 
 mux := // ...
 
 srv := &graceful.Server{
-  Timeout: 10 * time.Second,
+  Timeout: time.Duration(10) * time.Second,
 
   ConnState: func(conn net.Conn, state http.ConnState) {
     // conn has a new state
