@@ -97,7 +97,7 @@ When Graceful is sent a SIGINT or SIGTERM (possibly from ^C or a kill command), 
 3. Starts a timer of `timeout` duration to give active requests a chance to finish.
 4. When timeout expires, closes all active connections.
 5. Closes the `stopChan`, waking up any blocking goroutines.
-5. Returns from the function, allowing the server to terminate.
+6. Returns from the function, allowing the server to terminate.
 
 ## Notes
 
