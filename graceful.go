@@ -7,8 +7,11 @@ import (
 	"net/http"
 	"os"
 	"os/signal"
+	"sync"
 	"syscall"
 	"time"
+
+	"github.com/stretchr/pat/stop"
 )
 
 // Server wraps an http.Server with graceful connection handling.
@@ -22,6 +25,8 @@ import (
 //	}
 //	srv.ListenAndServe()
 type Server struct {
+	*http.Server
+
 	// Timeout is the duration to allow outstanding requests to survive
 	// before forcefully terminating them.
 	Timeout time.Duration
@@ -36,8 +41,17 @@ type Server struct {
 	// and the server to shut down.
 	interrupt chan os.Signal
 
-	*http.Server
+	// stopChan is the channel on which callers may block while waiting for
+	// the server to stop.
+	stopChan chan stop.Signal
+
+	// stopChanOnce is used to create the stop channel on demand, once, per
+	// instance.
+	stopChanOnce sync.Once
 }
+
+// ensure Server conforms to stop.Stopper
+var _ stop.Stopper = (*Server)(nil)
 
 // Run serves the http.Handler with graceful shutdown enabled.
 //
@@ -146,7 +160,7 @@ func (srv *Server) Serve(listener net.Listener) error {
 	}
 
 	// Manage open connections
-	stop := make(chan chan struct{})
+	shutdown := make(chan chan struct{})
 	kill := make(chan struct{})
 	go func() {
 		var done chan struct{}
@@ -161,7 +175,7 @@ func (srv *Server) Serve(listener net.Listener) error {
 					done <- struct{}{}
 					return
 				}
-			case done = <-stop:
+			case done = <-shutdown:
 				if len(connections) == 0 {
 					done <- struct{}{}
 					return
@@ -182,29 +196,57 @@ func (srv *Server) Serve(listener net.Listener) error {
 	// Set up the interrupt catch
 	signal.Notify(srv.interrupt, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
-		for _ = range srv.interrupt {
-			srv.SetKeepAlivesEnabled(false)
-			listener.Close()
-			signal.Stop(srv.interrupt)
-			close(srv.interrupt)
-		}
+		<-srv.interrupt
+		srv.SetKeepAlivesEnabled(false)
+		listener.Close()
+		signal.Stop(srv.interrupt)
+		close(srv.interrupt)
 	}()
 
-	// Serve with graceful listener
+	// Serve with graceful listener.
+	// Execution blocks here until listener.Close() is called, above.
 	err := srv.Server.Serve(listener)
 
 	// Request done notification
 	done := make(chan struct{})
-	stop <- done
+	shutdown <- done
 
 	if srv.Timeout > 0 {
 		select {
 		case <-done:
 		case <-time.After(srv.Timeout):
-			kill <- struct{}{}
+			close(kill)
 		}
 	} else {
 		<-done
 	}
+	// Close the stopChan to wake up any blocked goroutines.
+	if srv.stopChan != nil {
+		close(srv.stopChan)
+	}
 	return err
+}
+
+// Stop instructs the type to halt operations and close
+// the stop channel when it is finished.
+//
+// timeout is grace period for which to wait before shutting
+// down the server. The timeout value passed here will override the
+// timeout given when constructing the server, as this is an explicit
+// command to stop the server.
+func (srv *Server) Stop(timeout time.Duration) {
+	srv.Timeout = timeout
+	srv.interrupt <- syscall.SIGINT
+}
+
+// StopChan gets the stop channel which will block until
+// stopping has completed, at which point it is closed.
+// Callers should never close the stop channel.
+func (srv *Server) StopChan() <-chan stop.Signal {
+	srv.stopChanOnce.Do(func() {
+		if srv.stopChan == nil {
+			srv.stopChan = stop.Make()
+		}
+	})
+	return srv.stopChan
 }
