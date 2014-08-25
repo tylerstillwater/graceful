@@ -239,3 +239,27 @@ func TestGracefulExplicitStopOverride(t *testing.T) {
 		t.Fatal("Timed out while waiting for explicit stop to complete")
 	}
 }
+
+func TestShutdownInitiatedCallback(t *testing.T) {
+	server, l, err := createListener(1 * time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	called := make(chan struct{})
+	cb := func() { close(called) }
+
+	srv := &Server{Server: server, ShutdownInitiated: cb}
+
+	go func() {
+		go srv.Serve(l)
+		time.Sleep(10 * time.Millisecond)
+		srv.Stop(killTime)
+	}()
+
+	select {
+	case <-called:
+	case <-time.After(killTime):
+		t.Fatal("Timed out while waiting for ShutdownInitiated callback to be called")
+	}
+}
