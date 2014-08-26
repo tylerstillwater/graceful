@@ -154,8 +154,8 @@ func (srv *Server) Serve(listener net.Listener) error {
 			remove <- conn
 		}
 
-		if hook := srv.ConnState; hook != nil {
-			hook(conn, state)
+		if srv.ConnState != nil {
+			srv.ConnState(conn, state)
 		}
 	}
 
