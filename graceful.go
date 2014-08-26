@@ -250,3 +250,11 @@ func (srv *Server) StopChan() <-chan stop.Signal {
 	})
 	return srv.stopChan
 }
+
+// NotifyClosed tells the connection tracking goroutine that
+// a connection has closed. Hijacked connections no longer
+// notify the server of changes to the connection via the ConnState
+// callback, so the Server must be manually notified.
+func (srv *Server) NotifyClosed(conn net.Conn) {
+	srv.Server.ConnState(conn, http.StateClosed)
+}
