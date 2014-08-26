@@ -263,3 +263,54 @@ func TestShutdownInitiatedCallback(t *testing.T) {
 		t.Fatal("Timed out while waiting for ShutdownInitiated callback to be called")
 	}
 }
+func hijackingListener(srv *Server) (*http.Server, net.Listener, error) {
+	mux := http.NewServeMux()
+	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
+		conn, bufrw, err := rw.(http.Hijacker).Hijack()
+		if err != nil {
+			http.Error(rw, "webserver doesn't support hijacking", http.StatusInternalServerError)
+			return
+		}
+
+		defer conn.Close()
+		defer srv.NotifyClosed(conn)
+
+		bufrw.WriteString("HTTP/1.1 200 OK\r\n\r\n")
+		bufrw.Flush()
+	})
+
+	server := &http.Server{Addr: ":3000", Handler: mux}
+	l, err := net.Listen("tcp", ":3000")
+	return server, l, err
+}
+
+func TestNotifyClosed(t *testing.T) {
+	c := make(chan os.Signal, 1)
+
+	var wg sync.WaitGroup
+	wg.Add(1)
+
+	srv := &Server{Timeout: killTime, interrupt: c}
+	server, l, err := hijackingListener(srv)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv.Server = server
+
+	go func() {
+		srv.Serve(l)
+		wg.Done()
+	}()
+
+	wg.Add(1)
+	go launchTestQueries(t, &wg, c)
+
+	// block on the stopChan until the server has shut down
+	select {
+	case <-srv.StopChan():
+	case <-time.After(100 * time.Millisecond):
+		t.Fatal("Timed out while waiting for explicit stop to complete")
+	}
+
+}
