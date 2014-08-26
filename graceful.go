@@ -37,9 +37,9 @@ type Server struct {
 	// must not be set directly.
 	ConnState func(net.Conn, http.ConnState)
 
-	// ShutdownInitiated is an optional  callback function that is
-	// called when shutdown is initiated. It can be used to log the
-	// shutdown action before the listener is closed.
+	// ShutdownInitiated is an optional  callback function that is called
+	// when shutdown is initiated. It can be used to notify the client
+	// side of long lived connections (e.g. websockets) to reconnect.
 	ShutdownInitiated func()
 
 	// interrupt signals the listener to stop serving connections,
@@ -202,13 +202,13 @@ func (srv *Server) Serve(listener net.Listener) error {
 	signal.Notify(srv.interrupt, syscall.SIGINT, syscall.SIGTERM)
 	go func() {
 		<-srv.interrupt
-
-		if hook := srv.ShutdownInitiated; hook != nil {
-			hook()
-		}
-
 		srv.SetKeepAlivesEnabled(false)
 		listener.Close()
+
+		if srv.ShutdownInitiated != nil {
+			srv.ShutdownInitiated()
+		}
+
 		signal.Stop(srv.interrupt)
 		close(srv.interrupt)
 	}()
