@@ -108,3 +108,7 @@ This function stops the server, gracefully, using the new timeout value you prov
 returns a channel on which you can block while waiting for the server to stop. This channel will be closed when
 the server is stopped, allowing your execution to proceed. Multiple goroutines can block on this channel at the
 same time and all will be signalled when stopping is complete.
+
+## Contributing
+
+Before sending a pull request, please open a new issue describing the feature/issue you wish to address so it can be discussed. The subsequent pull request should close that issue.
