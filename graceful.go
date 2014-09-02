@@ -153,7 +153,7 @@ func (srv *Server) Serve(listener net.Listener) error {
 
 	srv.Server.ConnState = func(conn net.Conn, state http.ConnState) {
 		switch state {
-		case http.StateActive:
+		case http.StateNew:
 			add <- conn
 		case http.StateClosed, http.StateIdle:
 			remove <- conn
