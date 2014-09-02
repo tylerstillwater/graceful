@@ -53,6 +53,9 @@ type Server struct {
 	// stopChanOnce is used to create the stop channel on demand, once, per
 	// instance.
 	stopChanOnce sync.Once
+
+	// connections holds all connections managed by graceful
+	connections map[net.Conn]struct{}
 }
 
 // ensure Server conforms to stop.Stopper
@@ -155,7 +158,7 @@ func (srv *Server) Serve(listener net.Listener) error {
 		switch state {
 		case http.StateNew:
 			add <- conn
-		case http.StateClosed, http.StateIdle:
+		case http.StateClosed, http.StateHijacked:
 			remove <- conn
 		}
 
@@ -169,24 +172,24 @@ func (srv *Server) Serve(listener net.Listener) error {
 	kill := make(chan struct{})
 	go func() {
 		var done chan struct{}
-		connections := map[net.Conn]struct{}{}
+		srv.connections = map[net.Conn]struct{}{}
 		for {
 			select {
 			case conn := <-add:
-				connections[conn] = struct{}{}
+				srv.connections[conn] = struct{}{}
 			case conn := <-remove:
-				delete(connections, conn)
-				if done != nil && len(connections) == 0 {
+				delete(srv.connections, conn)
+				if done != nil && len(srv.connections) == 0 {
 					done <- struct{}{}
 					return
 				}
 			case done = <-shutdown:
-				if len(connections) == 0 {
+				if len(srv.connections) == 0 {
 					done <- struct{}{}
 					return
 				}
 			case <-kill:
-				for k := range connections {
+				for k := range srv.connections {
 					k.Close()
 				}
 				return
@@ -259,12 +262,4 @@ func (srv *Server) StopChan() <-chan stop.Signal {
 		}
 	})
 	return srv.stopChan
-}
-
-// NotifyClosed tells the connection tracking goroutine that
-// a connection has closed. Hijacked connections no longer
-// notify the server of changes to the connection via the ConnState
-// callback, so the Server must be manually notified.
-func (srv *Server) NotifyClosed(conn net.Conn) {
-	srv.Server.ConnState(conn, http.StateClosed)
 }

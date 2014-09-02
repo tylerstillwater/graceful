@@ -273,7 +273,6 @@ func hijackingListener(srv *Server) (*http.Server, net.Listener, error) {
 		}
 
 		defer conn.Close()
-		defer srv.NotifyClosed(conn)
 
 		bufrw.WriteString("HTTP/1.1 200 OK\r\n\r\n")
 		bufrw.Flush()
@@ -303,8 +302,15 @@ func TestNotifyClosed(t *testing.T) {
 		wg.Done()
 	}()
 
-	wg.Add(1)
-	go launchTestQueries(t, &wg, c)
+	for i := 0; i < 8; i++ {
+		runQuery(t, http.StatusOK, false, &wg)
+	}
+
+	if len(srv.connections) > 0 {
+		t.Fatal("hijacked connections should not be managed")
+	}
+
+	srv.Stop(0)
 
 	// block on the stopChan until the server has shut down
 	select {
