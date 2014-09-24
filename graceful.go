@@ -12,6 +12,7 @@ import (
 	"time"
 
 	"github.com/stretchr/pat/stop"
+	"code.google.com/p/go.net/netutil"
 )
 
 // Server wraps an http.Server with graceful connection handling.
@@ -30,6 +31,9 @@ type Server struct {
 	// Timeout is the duration to allow outstanding requests to survive
 	// before forcefully terminating them.
 	Timeout time.Duration
+
+	// Limit the number of outstanding requests
+	ListenLimit int
 
 	// ConnState specifies an optional callback function that is
 	// called when a client connection changes state. This is a proxy
@@ -100,6 +104,9 @@ func (srv *Server) ListenAndServe() error {
 		return err
 	}
 
+	if srv.ListenLimit != 0 {
+		l = netutil.LimitListener(l, srv.ListenLimit)
+	}
 	return srv.Serve(l)
 }
 
