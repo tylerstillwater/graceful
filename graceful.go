@@ -11,8 +11,8 @@ import (
 	"syscall"
 	"time"
 
-	"code.google.com/p/go.net/netutil"
 	"github.com/stretchr/pat/stop"
+	"golang.org/x/net/netutil"
 )
 
 // Server wraps an http.Server with graceful connection handling.
