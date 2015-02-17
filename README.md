@@ -8,10 +8,13 @@ Graceful is a Go 1.3+ package enabling graceful shutdown of http.Handler servers
 Usage of Graceful is simple. Create your http.Handler and pass it to the `Run` function:
 
 ```go
+package main
+
 import (
   "github.com/stretchr/graceful"
   "net/http"
   "fmt"
+  "time"
 )
 
 func main() {
@@ -34,6 +37,7 @@ import (
   "github.com/stretchr/graceful"
   "net/http"
   "fmt"
+  "time"
 )
 
 func main() {
