@@ -41,10 +41,15 @@ type Server struct {
 	// must not be set directly.
 	ConnState func(net.Conn, http.ConnState)
 
-	// ShutdownInitiated is an optional  callback function that is called
+	// ShutdownInitiated is an optional callback function that is called
 	// when shutdown is initiated. It can be used to notify the client
 	// side of long lived connections (e.g. websockets) to reconnect.
 	ShutdownInitiated func()
+
+	// NoSignalHandling prevents graceful from automatically shutting down
+	// on SIGINT and SIGTERM. If set to true, you must shut down the server
+	// manually with Stop().
+	NoSignalHandling bool
 
 	// interrupt signals the listener to stop serving connections,
 	// and the server to shut down.
@@ -222,8 +227,11 @@ func (srv *Server) Serve(listener net.Listener) error {
 		srv.interrupt = make(chan os.Signal, 1)
 	}
 
-	// Set up the interrupt catch
-	signal.Notify(srv.interrupt, syscall.SIGINT, syscall.SIGTERM)
+	// Set up the interrupt handler
+	if !srv.NoSignalHandling {
+		signal.Notify(srv.interrupt, syscall.SIGINT, syscall.SIGTERM)
+	}
+
 	go func() {
 		<-srv.interrupt
 		srv.SetKeepAlivesEnabled(false)
