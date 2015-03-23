@@ -46,10 +46,10 @@ type Server struct {
 	// side of long lived connections (e.g. websockets) to reconnect.
 	ShutdownInitiated func()
 
-	// DontAttachSignalHandler prevents graceful from automatically shutting down
-	// on SIGINT and SIGTERM. If set to true, you must shut down the server
+	// HandleStopSignals indicates if the server should automatically shut down
+	// on SIGINT and SIGTERM. If set to false, you must shut down the server
 	// manually with Stop().
-	DontAttachSignalHandler bool
+	HandleStopSignals bool
 
 	// interrupt signals the listener to stop serving connections,
 	// and the server to shut down.
@@ -70,15 +70,22 @@ type Server struct {
 // ensure Server conforms to stop.Stopper
 var _ stop.Stopper = (*Server)(nil)
 
+// NewServer constructs a graceful Server with a given underlying net/http server.
+func NewServer(timeout time.Duration, httpServer *http.Server, handleStopSignals bool) *Server {
+	return &Server{
+		Timeout: timeout,
+		Server:  httpServer,
+
+		HandleStopSignals: handleStopSignals,
+	}
+}
+
 // Run serves the http.Handler with graceful shutdown enabled.
 //
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
 func Run(addr string, timeout time.Duration, n http.Handler) {
-	srv := &Server{
-		Timeout: timeout,
-		Server:  &http.Server{Addr: addr, Handler: n},
-	}
+	srv := NewServer(timeout, &http.Server{Addr: addr, Handler: n}, true)
 
 	if err := srv.ListenAndServe(); err != nil {
 		if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
@@ -93,7 +100,7 @@ func Run(addr string, timeout time.Duration, n http.Handler) {
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
 func ListenAndServe(server *http.Server, timeout time.Duration) error {
-	srv := &Server{Timeout: timeout, Server: server}
+	srv := NewServer(timeout, server, true)
 	return srv.ListenAndServe()
 }
 
@@ -120,7 +127,7 @@ func (srv *Server) ListenAndServe() error {
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
 func ListenAndServeTLS(server *http.Server, certFile, keyFile string, timeout time.Duration) error {
-	srv := &Server{Timeout: timeout, Server: server}
+	srv := NewServer(timeout, server, true)
 	return srv.ListenAndServeTLS(certFile, keyFile)
 }
 
@@ -161,7 +168,7 @@ func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error {
 // timeout is the duration to wait until killing active requests and stopping the server.
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
 func Serve(server *http.Server, l net.Listener, timeout time.Duration) error {
-	srv := &Server{Timeout: timeout, Server: server}
+	srv := NewServer(timeout, server, true)
 	return srv.Serve(l)
 }
 
@@ -219,7 +226,7 @@ func (srv *Server) Serve(listener net.Listener) error {
 	}
 
 	// Set up the interrupt handler
-	if !srv.DontAttachSignalHandler {
+	if srv.HandleStopSignals {
 		signal.Notify(srv.interrupt, syscall.SIGINT, syscall.SIGTERM)
 	}
 
