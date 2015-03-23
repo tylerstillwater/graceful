@@ -54,9 +54,8 @@ type Server struct {
 	// the server to stop.
 	stopChan chan stop.Signal
 
-	// stopChanOnce is used to create the stop channel on demand, once, per
-	// instance.
-	stopChanOnce sync.Once
+	// stopLock is used to protect access to the stopChan.
+	stopLock sync.RWMutex
 
 	// connections holds all connections managed by graceful
 	connections map[net.Conn]struct{}
@@ -166,12 +165,22 @@ func (srv *Server) Serve(listener net.Listener) error {
 	add := make(chan net.Conn)
 	remove := make(chan net.Conn)
 
+	times := map[net.Conn]time.Time{}
+	var bolt sync.Mutex
+
 	srv.Server.ConnState = func(conn net.Conn, state http.ConnState) {
+
 		switch state {
 		case http.StateNew:
+			bolt.Lock()
+			times[conn] = time.Now()
+			bolt.Unlock()
 			add <- conn
 		case http.StateClosed, http.StateHijacked:
 			remove <- conn
+			bolt.Lock()
+			delete(times, conn)
+			bolt.Unlock()
 		}
 
 		if srv.ConnState != nil {
@@ -246,9 +255,11 @@ func (srv *Server) Serve(listener net.Listener) error {
 		<-done
 	}
 	// Close the stopChan to wake up any blocked goroutines.
+	srv.stopLock.Lock()
 	if srv.stopChan != nil {
 		close(srv.stopChan)
 	}
+	srv.stopLock.Unlock()
 	return err
 }
 
@@ -268,10 +279,10 @@ func (srv *Server) Stop(timeout time.Duration) {
 // stopping has completed, at which point it is closed.
 // Callers should never close the stop channel.
 func (srv *Server) StopChan() <-chan stop.Signal {
-	srv.stopChanOnce.Do(func() {
-		if srv.stopChan == nil {
-			srv.stopChan = stop.Make()
-		}
-	})
+	srv.stopLock.Lock()
+	if srv.stopChan == nil {
+		srv.stopChan = stop.Make()
+	}
+	srv.stopLock.Unlock()
 	return srv.stopChan
 }

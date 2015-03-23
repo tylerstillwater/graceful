@@ -160,13 +160,22 @@ func TestGracefulRunNoRequests(t *testing.T) {
 func TestGracefulForwardsConnState(t *testing.T) {
 	c := make(chan os.Signal, 1)
 	states := make(map[http.ConnState]int)
+	var stateLock sync.Mutex
 
 	connState := func(conn net.Conn, state http.ConnState) {
+		stateLock.Lock()
 		states[state]++
+		stateLock.Unlock()
 	}
 
 	var wg sync.WaitGroup
 	wg.Add(1)
+
+	expected := map[http.ConnState]int{
+		http.StateNew:    8,
+		http.StateActive: 8,
+		http.StateClosed: 8,
+	}
 
 	go func() {
 		server, l, _ := createListener(killTime / 2)
@@ -185,15 +194,11 @@ func TestGracefulForwardsConnState(t *testing.T) {
 	go launchTestQueries(t, &wg, c)
 	wg.Wait()
 
-	expected := map[http.ConnState]int{
-		http.StateNew:    8,
-		http.StateActive: 8,
-		http.StateClosed: 8,
-	}
-
+	stateLock.Lock()
 	if !reflect.DeepEqual(states, expected) {
 		t.Errorf("Incorrect connection state tracking.\n  actual: %v\nexpected: %v\n", states, expected)
 	}
+	stateLock.Unlock()
 }
 
 func TestGracefulExplicitStop(t *testing.T) {
@@ -306,10 +311,6 @@ func TestNotifyClosed(t *testing.T) {
 		runQuery(t, http.StatusOK, false, &wg)
 	}
 
-	if len(srv.connections) > 0 {
-		t.Fatal("hijacked connections should not be managed")
-	}
-
 	srv.Stop(0)
 
 	// block on the stopChan until the server has shut down
@@ -317,6 +318,10 @@ func TestNotifyClosed(t *testing.T) {
 	case <-srv.StopChan():
 	case <-time.After(100 * time.Millisecond):
 		t.Fatal("Timed out while waiting for explicit stop to complete")
+	}
+
+	if len(srv.connections) > 0 {
+		t.Fatal("hijacked connections should not be managed")
 	}
 
 }
