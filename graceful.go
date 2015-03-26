@@ -11,7 +11,6 @@ import (
 	"syscall"
 	"time"
 
-	"github.com/stretchr/pat/stop"
 	"golang.org/x/net/netutil"
 )
 
@@ -57,7 +56,7 @@ type Server struct {
 
 	// stopChan is the channel on which callers may block while waiting for
 	// the server to stop.
-	stopChan chan stop.Signal
+	stopChan chan struct{}
 
 	// stopLock is used to protect access to the stopChan.
 	stopLock sync.RWMutex
@@ -65,9 +64,6 @@ type Server struct {
 	// connections holds all connections managed by graceful
 	connections map[net.Conn]struct{}
 }
-
-// ensure Server conforms to stop.Stopper
-var _ stop.Stopper = (*Server)(nil)
 
 // Run serves the http.Handler with graceful shutdown enabled.
 //
@@ -286,10 +282,10 @@ func (srv *Server) Stop(timeout time.Duration) {
 // StopChan gets the stop channel which will block until
 // stopping has completed, at which point it is closed.
 // Callers should never close the stop channel.
-func (srv *Server) StopChan() <-chan stop.Signal {
+func (srv *Server) StopChan() <-chan struct{} {
 	srv.stopLock.Lock()
 	if srv.stopChan == nil {
-		srv.stopChan = stop.Make()
+		srv.stopChan = make(chan struct{})
 	}
 	srv.stopLock.Unlock()
 	return srv.stopChan
