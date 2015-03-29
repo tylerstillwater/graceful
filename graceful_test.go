@@ -23,22 +23,28 @@ func runQuery(t *testing.T, expected int, shouldErr bool, wg *sync.WaitGroup) {
 	if shouldErr && err == nil {
 		t.Fatal("Expected an error but none was encountered.")
 	} else if shouldErr && err != nil {
-		if err.(*url.Error).Err == io.EOF {
+		if checkErr(t, err) {
 			return
-		}
-		errno := err.(*url.Error).Err.(*net.OpError).Err.(syscall.Errno)
-		if errno == syscall.ECONNREFUSED {
-			return
-		} else if err != nil {
-			t.Fatal("Error on Get:", err)
 		}
 	}
-
 	if r != nil && r.StatusCode != expected {
 		t.Fatalf("Incorrect status code on response. Expected %d. Got %d", expected, r.StatusCode)
 	} else if r == nil {
 		t.Fatal("No response when a response was expected.")
 	}
+}
+
+func checkErr(t *testing.T, err error) bool {
+	if err.(*url.Error).Err == io.EOF {
+		return true
+	}
+	errno := err.(*url.Error).Err.(*net.OpError).Err.(syscall.Errno)
+	if errno == syscall.ECONNREFUSED {
+		return true
+	} else if err != nil {
+		t.Fatal("Error on Get:", err)
+	}
+	return false
 }
 
 func createListener(sleep time.Duration) (*http.Server, net.Listener, error) {

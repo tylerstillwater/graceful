@@ -166,24 +166,22 @@ func (srv *Server) Serve(listener net.Listener) error {
 	add := make(chan net.Conn)
 	remove := make(chan net.Conn)
 
+	var timesLock sync.Mutex
 	times := map[net.Conn]time.Time{}
-	var bolt sync.Mutex
 
 	srv.Server.ConnState = func(conn net.Conn, state http.ConnState) {
-
 		switch state {
 		case http.StateNew:
-			bolt.Lock()
+			timesLock.Lock()
 			times[conn] = time.Now()
-			bolt.Unlock()
+			timesLock.Unlock()
 			add <- conn
 		case http.StateClosed, http.StateHijacked:
 			remove <- conn
-			bolt.Lock()
+			timesLock.Lock()
 			delete(times, conn)
-			bolt.Unlock()
+			timesLock.Unlock()
 		}
-
 		if srv.ConnState != nil {
 			srv.ConnState(conn, state)
 		}
@@ -192,78 +190,24 @@ func (srv *Server) Serve(listener net.Listener) error {
 	// Manage open connections
 	shutdown := make(chan chan struct{})
 	kill := make(chan struct{})
-	go func() {
-		var done chan struct{}
-		srv.connections = map[net.Conn]struct{}{}
-		for {
-			select {
-			case conn := <-add:
-				srv.connections[conn] = struct{}{}
-			case conn := <-remove:
-				delete(srv.connections, conn)
-				if done != nil && len(srv.connections) == 0 {
-					done <- struct{}{}
-					return
-				}
-			case done = <-shutdown:
-				if len(srv.connections) == 0 {
-					done <- struct{}{}
-					return
-				}
-			case <-kill:
-				for k := range srv.connections {
-					k.Close()
-				}
-				return
-			}
-		}
-	}()
+	go srv.manageConnections(add, remove, shutdown, kill)
 
 	if srv.interrupt == nil {
 		srv.interrupt = make(chan os.Signal, 1)
 	}
-
 	// Set up the interrupt handler
 	if !srv.NoSignalHandling {
 		signal.Notify(srv.interrupt, syscall.SIGINT, syscall.SIGTERM)
 	}
 
-	go func() {
-		<-srv.interrupt
-		srv.SetKeepAlivesEnabled(false)
-		listener.Close()
-
-		if srv.ShutdownInitiated != nil {
-			srv.ShutdownInitiated()
-		}
-
-		signal.Stop(srv.interrupt)
-		close(srv.interrupt)
-	}()
+	go srv.handleInterrupt(listener)
 
 	// Serve with graceful listener.
 	// Execution blocks here until listener.Close() is called, above.
 	err := srv.Server.Serve(listener)
 
-	// Request done notification
-	done := make(chan struct{})
-	shutdown <- done
+	srv.shutdown(shutdown, kill)
 
-	if srv.Timeout > 0 {
-		select {
-		case <-done:
-		case <-time.After(srv.Timeout):
-			close(kill)
-		}
-	} else {
-		<-done
-	}
-	// Close the stopChan to wake up any blocked goroutines.
-	srv.stopLock.Lock()
-	if srv.stopChan != nil {
-		close(srv.stopChan)
-	}
-	srv.stopLock.Unlock()
 	return err
 }
 
@@ -289,4 +233,68 @@ func (srv *Server) StopChan() <-chan struct{} {
 	}
 	srv.stopLock.Unlock()
 	return srv.stopChan
+}
+
+func (srv *Server) manageConnections(add, remove chan net.Conn, shutdown chan chan struct{}, kill chan struct{}) {
+	{
+		var done chan struct{}
+		srv.connections = map[net.Conn]struct{}{}
+		for {
+			select {
+			case conn := <-add:
+				srv.connections[conn] = struct{}{}
+			case conn := <-remove:
+				delete(srv.connections, conn)
+				if done != nil && len(srv.connections) == 0 {
+					done <- struct{}{}
+					return
+				}
+			case done = <-shutdown:
+				if len(srv.connections) == 0 {
+					done <- struct{}{}
+					return
+				}
+			case <-kill:
+				for k := range srv.connections {
+					_ = k.Close() // nothing to do here if it errors
+				}
+				return
+			}
+		}
+	}
+}
+
+func (srv *Server) handleInterrupt(listener net.Listener) {
+	<-srv.interrupt
+	srv.SetKeepAlivesEnabled(false)
+	_ = listener.Close() // we are shutting down anyway. ignore error.
+
+	if srv.ShutdownInitiated != nil {
+		srv.ShutdownInitiated()
+	}
+
+	signal.Stop(srv.interrupt)
+	close(srv.interrupt)
+}
+
+func (srv *Server) shutdown(shutdown chan chan struct{}, kill chan struct{}) {
+	// Request done notification
+	done := make(chan struct{})
+	shutdown <- done
+
+	if srv.Timeout > 0 {
+		select {
+		case <-done:
+		case <-time.After(srv.Timeout):
+			close(kill)
+		}
+	} else {
+		<-done
+	}
+	// Close the stopChan to wake up any blocked goroutines.
+	srv.stopLock.Lock()
+	if srv.stopChan != nil {
+		close(srv.stopChan)
+	}
+	srv.stopLock.Unlock()
 }
