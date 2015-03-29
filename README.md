@@ -3,6 +3,16 @@ graceful [![GoDoc](https://godoc.org/github.com/tylerb/graceful?status.png)](htt
 
 Graceful is a Go 1.3+ package enabling graceful shutdown of http.Handler servers.
 
+## Installation
+
+To install, simply execute:
+
+```
+go get gopkg.in/tylerb/graceful.v1
+```
+
+I am using [gopkg.in](http://http://labix.org/gopkg.in) to control releases.
+
 ## Usage
 
 Usage of Graceful is simple. Create your http.Handler and pass it to the `Run` function:
