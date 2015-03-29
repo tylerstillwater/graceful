@@ -15,7 +15,7 @@ I am using [gopkg.in](http://http://labix.org/gopkg.in) to control releases.
 
 ## Usage
 
-Usage of Graceful is simple. Create your http.Handler and pass it to the `Run` function:
+Using Graceful is esay. Simply create your http.Handler and pass it to the `Run` function:
 
 ```go
 package main
@@ -125,4 +125,13 @@ same time and all will be signalled when stopping is complete.
 
 ## Contributing
 
-Before sending a pull request, please open a new issue describing the feature/issue you wish to address so it can be discussed. The subsequent pull request should close that issue.
+If you would like to contribute, please:
+
+1. Create a GitHub issue regarding the contribution. Features and bugs should be discussed beforehand.
+2. Fork the repository.
+3. Create a pull request with your solution. This pull request should reference and close the issues (Fix #2).
+
+All pull requests should:
+
+1. Pass [gometalinter -t .](https://github.com/alecthomas/gometalinter) with no warnings.
+2. Be `go fmt` formatted.
