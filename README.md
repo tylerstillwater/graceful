@@ -15,7 +15,7 @@ I am using [gopkg.in](http://http://labix.org/gopkg.in) to control releases.
 
 ## Usage
 
-Using Graceful is esay. Simply create your http.Handler and pass it to the `Run` function:
+Using Graceful is easy. Simply create your http.Handler and pass it to the `Run` function:
 
 ```go
 package main

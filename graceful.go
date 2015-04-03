@@ -166,21 +166,12 @@ func (srv *Server) Serve(listener net.Listener) error {
 	add := make(chan net.Conn)
 	remove := make(chan net.Conn)
 
-	var timesLock sync.Mutex
-	times := map[net.Conn]time.Time{}
-
 	srv.Server.ConnState = func(conn net.Conn, state http.ConnState) {
 		switch state {
 		case http.StateNew:
-			timesLock.Lock()
-			times[conn] = time.Now()
-			timesLock.Unlock()
 			add <- conn
 		case http.StateClosed, http.StateHijacked:
 			remove <- conn
-			timesLock.Lock()
-			delete(times, conn)
-			timesLock.Unlock()
 		}
 		if srv.ConnState != nil {
 			srv.ConnState(conn, state)
