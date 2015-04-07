@@ -1,6 +1,7 @@
 package graceful
 
 import (
+	"fmt"
 	"io"
 	"net"
 	"net/http"
@@ -13,28 +14,38 @@ import (
 	"time"
 )
 
-var killTime = 50 * time.Millisecond
+var (
+	killTime    = 500 * time.Millisecond
+	timeoutTime = 1000 * time.Millisecond
+	waitTime    = 100 * time.Millisecond
+)
 
-func runQuery(t *testing.T, expected int, shouldErr bool, wg *sync.WaitGroup) {
+func runQuery(t *testing.T, expected int, shouldErr bool, wg *sync.WaitGroup, once *sync.Once) {
 	wg.Add(1)
 	defer wg.Done()
 	client := http.Client{}
 	r, err := client.Get("http://localhost:3000")
 	if shouldErr && err == nil {
-		t.Fatal("Expected an error but none was encountered.")
+		once.Do(func() {
+			t.Fatal("Expected an error but none was encountered.")
+		})
 	} else if shouldErr && err != nil {
-		if checkErr(t, err) {
+		if checkErr(t, err, once) {
 			return
 		}
 	}
 	if r != nil && r.StatusCode != expected {
-		t.Fatalf("Incorrect status code on response. Expected %d. Got %d", expected, r.StatusCode)
+		once.Do(func() {
+			t.Fatalf("Incorrect status code on response. Expected %d. Got %d", expected, r.StatusCode)
+		})
 	} else if r == nil {
-		t.Fatal("No response when a response was expected.")
+		once.Do(func() {
+			t.Fatal("No response when a response was expected.")
+		})
 	}
 }
 
-func checkErr(t *testing.T, err error) bool {
+func checkErr(t *testing.T, err error, once *sync.Once) bool {
 	if err.(*url.Error).Err == io.EOF {
 		return true
 	}
@@ -42,7 +53,9 @@ func checkErr(t *testing.T, err error) bool {
 	if errno == syscall.ECONNREFUSED {
 		return true
 	} else if err != nil {
-		t.Fatal("Error on Get:", err)
+		once.Do(func() {
+			t.Fatal("Error on Get:", err)
+		})
 	}
 	return false
 }
@@ -56,6 +69,9 @@ func createListener(sleep time.Duration) (*http.Server, net.Listener, error) {
 
 	server := &http.Server{Addr: ":3000", Handler: mux}
 	l, err := net.Listen("tcp", ":3000")
+	if err != nil {
+		fmt.Println(err)
+	}
 	return server, l, err
 }
 
@@ -70,16 +86,17 @@ func runServer(timeout, sleep time.Duration, c chan os.Signal) error {
 }
 
 func launchTestQueries(t *testing.T, wg *sync.WaitGroup, c chan os.Signal) {
+	var once sync.Once
 	for i := 0; i < 8; i++ {
-		go runQuery(t, http.StatusOK, false, wg)
+		go runQuery(t, http.StatusOK, false, wg, &once)
 	}
 
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(waitTime)
 	c <- os.Interrupt
-	time.Sleep(10 * time.Millisecond)
+	time.Sleep(waitTime)
 
 	for i := 0; i < 8; i++ {
-		go runQuery(t, 0, true, wg)
+		go runQuery(t, 0, true, wg, &once)
 	}
 
 	wg.Done()
@@ -112,16 +129,17 @@ func TestGracefulRunTimesOut(t *testing.T) {
 		wg.Done()
 	}()
 
+	var once sync.Once
 	wg.Add(1)
 	go func() {
 		for i := 0; i < 8; i++ {
-			go runQuery(t, 0, true, &wg)
+			go runQuery(t, 0, true, &wg, &once)
 		}
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(waitTime)
 		c <- os.Interrupt
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(waitTime)
 		for i := 0; i < 8; i++ {
-			go runQuery(t, 0, true, &wg)
+			go runQuery(t, 0, true, &wg, &once)
 		}
 		wg.Done()
 	}()
@@ -217,14 +235,14 @@ func TestGracefulExplicitStop(t *testing.T) {
 
 	go func() {
 		go srv.Serve(l)
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(waitTime)
 		srv.Stop(killTime)
 	}()
 
 	// block on the stopChan until the server has shut down
 	select {
 	case <-srv.StopChan():
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(timeoutTime):
 		t.Fatal("Timed out while waiting for explicit stop to complete")
 	}
 }
@@ -239,7 +257,7 @@ func TestGracefulExplicitStopOverride(t *testing.T) {
 
 	go func() {
 		go srv.Serve(l)
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(waitTime)
 		srv.Stop(killTime / 2)
 	}()
 
@@ -264,7 +282,7 @@ func TestShutdownInitiatedCallback(t *testing.T) {
 
 	go func() {
 		go srv.Serve(l)
-		time.Sleep(10 * time.Millisecond)
+		time.Sleep(waitTime)
 		srv.Stop(killTime)
 	}()
 
@@ -313,8 +331,9 @@ func TestNotifyClosed(t *testing.T) {
 		wg.Done()
 	}()
 
+	var once sync.Once
 	for i := 0; i < 8; i++ {
-		runQuery(t, http.StatusOK, false, &wg)
+		runQuery(t, http.StatusOK, false, &wg, &once)
 	}
 
 	srv.Stop(0)
@@ -322,7 +341,7 @@ func TestNotifyClosed(t *testing.T) {
 	// block on the stopChan until the server has shut down
 	select {
 	case <-srv.StopChan():
-	case <-time.After(100 * time.Millisecond):
+	case <-time.After(timeoutTime):
 		t.Fatal("Timed out while waiting for explicit stop to complete")
 	}
 

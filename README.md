@@ -1,4 +1,4 @@
-graceful [![GoDoc](https://godoc.org/github.com/tylerb/graceful?status.png)](http://godoc.org/github.com/tylerb/graceful) [![wercker status](https://app.wercker.com/status/2729ba763abf87695a17547e0f7af4a4/s "wercker status")](https://app.wercker.com/project/bykey/2729ba763abf87695a17547e0f7af4a4)
+graceful [![GoDoc](https://godoc.org/github.com/tylerb/graceful?status.png)](http://godoc.org/github.com/tylerb/graceful) [![Build Status](https://drone.io/github.com/tylerb/graceful/status.png)](https://drone.io/github.com/tylerb/graceful/latest) [![Coverage Status](https://coveralls.io/repos/tylerb/graceful/badge.svg?branch=dronedebug)](https://coveralls.io/r/tylerb/graceful?branch=dronedebug)
 ========
 
 Graceful is a Go 1.3+ package enabling graceful shutdown of http.Handler servers.
