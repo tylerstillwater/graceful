@@ -350,3 +350,30 @@ func TestNotifyClosed(t *testing.T) {
 	}
 
 }
+
+func TestStopDeadlock(t *testing.T) {
+	c := make(chan struct{})
+
+	server, l, err := createListener(1 * time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := &Server{Server: server, NoSignalHandling: true}
+
+	go func() {
+		time.Sleep(waitTime)
+		srv.Serve(l)
+	}()
+
+	go func() {
+		srv.Stop(0)
+		close(c)
+	}()
+
+	select {
+	case <-c:
+	case <-time.After(timeoutTime):
+		t.Fatal("Timed out while waiting for explicit stop to complete")
+	}
+}
