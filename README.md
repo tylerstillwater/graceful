@@ -21,7 +21,7 @@ Using Graceful is easy. Simply create your http.Handler and pass it to the `Run`
 package main
 
 import (
-  "github.com/tylerb/graceful"
+  "gopkg.in/tylerb/graceful.v1"
   "net/http"
   "fmt"
   "time"
@@ -44,7 +44,7 @@ package main
 
 import (
   "github.com/codegangsta/negroni"
-  "github.com/tylerb/graceful"
+  "gopkg.in/tylerb/graceful.v1"
   "net/http"
   "fmt"
   "time"
