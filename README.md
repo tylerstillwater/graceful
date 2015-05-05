@@ -11,7 +11,7 @@ To install, simply execute:
 go get gopkg.in/tylerb/graceful.v1
 ```
 
-I am using [gopkg.in](http://http://labix.org/gopkg.in) to control releases.
+I am using [gopkg.in](http://labix.org/gopkg.in) to control releases.
 
 ## Usage
 
