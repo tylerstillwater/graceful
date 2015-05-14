@@ -151,6 +151,38 @@ func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	return srv.Serve(tlsListener)
 }
 
+//
+func (srv *Server) ListenAndServeTLScerts(cert, key []byte) error {
+	// Create the listener ourselves so we can control its lifetime
+	addr := srv.Addr
+	if addr == "" {
+		addr = ":https"
+	}
+
+	config := &tls.Config{}
+	if srv.TLSConfig != nil {
+		*config = *srv.TLSConfig
+	}
+	if config.NextProtos == nil {
+		config.NextProtos = []string{"http/1.1"}
+	}
+
+	var err error
+	config.Certificates = make([]tls.Certificate, 1)
+	config.Certificates[0], err = tls.X509KeyPair(cert, key)
+	if err != nil {
+		return err
+	}
+
+	conn, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	tlsListener := tls.NewListener(conn, config)
+	return srv.Serve(tlsListener)
+}
+
 // Serve is equivalent to http.Server.Serve with graceful shutdown enabled.
 //
 // timeout is the duration to wait until killing active requests and stopping the server.
