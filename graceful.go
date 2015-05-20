@@ -151,6 +151,23 @@ func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	return srv.Serve(tlsListener)
 }
 
+// ListenAndServeTLSConfig can be used with an existing TLS config and is equivalent to
+// http.Server.ListenAndServeTLS with graceful shutdown enabled,
+func (srv *Server) ListenAndServeTLSConfig(config *tls.Config) error {
+	addr := srv.Addr
+	if addr == "" {
+		addr = ":https"
+	}
+
+	conn, err := net.Listen("tcp", addr)
+	if err != nil {
+		return err
+	}
+
+	tlsListener := tls.NewListener(conn, config)
+	return srv.Serve(tlsListener)
+}
+
 // Serve is equivalent to http.Server.Serve with graceful shutdown enabled.
 //
 // timeout is the duration to wait until killing active requests and stopping the server.
