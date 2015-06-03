@@ -244,30 +244,28 @@ func (srv *Server) StopChan() <-chan struct{} {
 }
 
 func (srv *Server) manageConnections(add, remove chan net.Conn, shutdown chan chan struct{}, kill chan struct{}) {
-	{
-		var done chan struct{}
-		srv.connections = map[net.Conn]struct{}{}
-		for {
-			select {
-			case conn := <-add:
-				srv.connections[conn] = struct{}{}
-			case conn := <-remove:
-				delete(srv.connections, conn)
-				if done != nil && len(srv.connections) == 0 {
-					done <- struct{}{}
-					return
-				}
-			case done = <-shutdown:
-				if len(srv.connections) == 0 {
-					done <- struct{}{}
-					return
-				}
-			case <-kill:
-				for k := range srv.connections {
-					_ = k.Close() // nothing to do here if it errors
-				}
+	var done chan struct{}
+	srv.connections = map[net.Conn]struct{}{}
+	for {
+		select {
+		case conn := <-add:
+			srv.connections[conn] = struct{}{}
+		case conn := <-remove:
+			delete(srv.connections, conn)
+			if done != nil && len(srv.connections) == 0 {
+				done <- struct{}{}
 				return
 			}
+		case done = <-shutdown:
+			if len(srv.connections) == 0 {
+				done <- struct{}{}
+				return
+			}
+		case <-kill:
+			for k := range srv.connections {
+				_ = k.Close() // nothing to do here if it errors
+			}
+			return
 		}
 	}
 }
