@@ -119,8 +119,10 @@ func ListenAndServeTLS(server *http.Server, certFile, keyFile string, timeout ti
 	return srv.ListenAndServeTLS(certFile, keyFile)
 }
 
-// ListenAndServeTLS is equivalent to http.Server.ListenAndServeTLS with graceful shutdown enabled.
-func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error {
+// ListenTLS is a convenience method that creates an https listener using the
+// provided cert and key files. Use this method if you need access to the
+// listener object directly. When ready, pass it to the Serve method.
+func (srv *Server) ListenTLS(certFile, keyFile string) (net.Listener, error) {
 	// Create the listener ourselves so we can control its lifetime
 	addr := srv.Addr
 	if addr == "" {
@@ -139,16 +141,25 @@ func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error {
 	config.Certificates = make([]tls.Certificate, 1)
 	config.Certificates[0], err = tls.LoadX509KeyPair(certFile, keyFile)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	conn, err := net.Listen("tcp", addr)
 	if err != nil {
-		return err
+		return nil, err
 	}
 
 	tlsListener := tls.NewListener(conn, config)
-	return srv.Serve(tlsListener)
+	return tlsListener, nil
+}
+
+// ListenAndServeTLS is equivalent to http.Server.ListenAndServeTLS with graceful shutdown enabled.
+func (srv *Server) ListenAndServeTLS(certFile, keyFile string) error {
+	l, err := srv.ListenTLS(certFile, keyFile)
+	if err != nil {
+		return err
+	}
+	return srv.Serve(l)
 }
 
 // ListenAndServeTLSConfig can be used with an existing TLS config and is equivalent to
