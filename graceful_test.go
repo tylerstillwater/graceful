@@ -24,7 +24,7 @@ func runQuery(t *testing.T, expected int, shouldErr bool, wg *sync.WaitGroup, on
 	wg.Add(1)
 	defer wg.Done()
 	client := http.Client{}
-	r, err := client.Get("http://localhost:3000")
+	r, err := client.Get("http://localhost:9654")
 	if shouldErr && err == nil {
 		once.Do(func() {
 			t.Fatal("Expected an error but none was encountered.")
@@ -67,8 +67,8 @@ func createListener(sleep time.Duration) (*http.Server, net.Listener, error) {
 		rw.WriteHeader(http.StatusOK)
 	})
 
-	server := &http.Server{Addr: ":3000", Handler: mux}
-	l, err := net.Listen("tcp", ":3000")
+	server := &http.Server{Addr: ":9654", Handler: mux}
+	l, err := net.Listen("tcp", ":9654")
 	if err != nil {
 		fmt.Println(err)
 	}
@@ -307,8 +307,8 @@ func hijackingListener(srv *Server) (*http.Server, net.Listener, error) {
 		bufrw.Flush()
 	})
 
-	server := &http.Server{Addr: ":3000", Handler: mux}
-	l, err := net.Listen("tcp", ":3000")
+	server := &http.Server{Addr: ":9654", Handler: mux}
+	l, err := net.Listen("tcp", ":9654")
 	return server, l, err
 }
 
@@ -373,6 +373,27 @@ func TestStopDeadlock(t *testing.T) {
 
 	select {
 	case <-c:
+	case <-time.After(timeoutTime):
+		t.Fatal("Timed out while waiting for explicit stop to complete")
+	}
+}
+
+// Run with --race
+func TestStopRace(t *testing.T) {
+	server, l, err := createListener(1 * time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	srv := &Server{Timeout: killTime, Server: server}
+
+	go func() {
+		go srv.Serve(l)
+		srv.Stop(killTime)
+	}()
+	srv.Stop(0)
+	select {
+	case <-srv.StopChan():
 	case <-time.After(timeoutTime):
 		t.Fatal("Timed out while waiting for explicit stop to complete")
 	}
