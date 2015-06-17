@@ -373,6 +373,7 @@ func TestStopDeadlock(t *testing.T) {
 
 	select {
 	case <-c:
+		l.Close()
 	case <-time.After(timeoutTime):
 		t.Fatal("Timed out while waiting for explicit stop to complete")
 	}
