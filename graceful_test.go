@@ -269,16 +269,18 @@ func TestGracefulExplicitStopOverride(t *testing.T) {
 	}
 }
 
-func TestShutdownInitiatedCallback(t *testing.T) {
+func TestBeforeShutdownAndShutdownInitiatedCallbacks(t *testing.T) {
 	server, l, err := createListener(1 * time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	called := make(chan struct{})
-	cb := func() { close(called) }
+	beforeShutdownCalled := make(chan struct{})
+	cb1 := func() { close(beforeShutdownCalled) }
+	shutdownInitiatedCalled := make(chan struct{})
+	cb2 := func() { close(shutdownInitiatedCalled) }
 
-	srv := &Server{Server: server, ShutdownInitiated: cb}
+	srv := &Server{Server: server, BeforeShutdown: cb1, ShutdownInitiated: cb2}
 
 	go func() {
 		go srv.Serve(l)
@@ -286,10 +288,29 @@ func TestShutdownInitiatedCallback(t *testing.T) {
 		srv.Stop(killTime)
 	}()
 
-	select {
-	case <-called:
-	case <-time.After(killTime):
-		t.Fatal("Timed out while waiting for ShutdownInitiated callback to be called")
+	beforeShutdown := false
+	shutdownInitiated := false
+	for i := 0; i < 2; i++ {
+		select {
+		case <-beforeShutdownCalled:
+			if shutdownInitiated {
+				t.Fatal("ShutdownInitiated callback called before BeforeShutdown callback")
+			}
+			beforeShutdownCalled = nil
+			beforeShutdown = true
+		case <-shutdownInitiatedCalled:
+			shutdownInitiatedCalled = nil
+			shutdownInitiated = true
+		case <-time.After(killTime):
+			t.Fatal("Timed out while waiting for ShutdownInitiated callback to be called")
+		}
+	}
+
+	if !beforeShutdown {
+		t.Fatal("beforeShutdown should be true")
+	}
+	if !shutdownInitiated {
+		t.Fatal("shutdownInitiated should be true")
 	}
 }
 func hijackingListener(srv *Server) (*http.Server, net.Listener, error) {
