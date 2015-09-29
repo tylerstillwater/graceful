@@ -293,9 +293,6 @@ func TestBeforeShutdownAndShutdownInitiatedCallbacks(t *testing.T) {
 	for i := 0; i < 2; i++ {
 		select {
 		case <-beforeShutdownCalled:
-			if shutdownInitiated {
-				t.Fatal("ShutdownInitiated callback called before BeforeShutdown callback")
-			}
 			beforeShutdownCalled = nil
 			beforeShutdown = true
 		case <-shutdownInitiatedCalled:
