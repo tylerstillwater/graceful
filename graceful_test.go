@@ -49,7 +49,13 @@ func checkErr(t *testing.T, err error, once *sync.Once) bool {
 	if err.(*url.Error).Err == io.EOF {
 		return true
 	}
-	errno := err.(*url.Error).Err.(*net.OpError).Err.(*os.SyscallError).Err.(syscall.Errno)
+	var errno syscall.Errno
+	switch e := err.(*url.Error).Err.(*net.OpError).Err.(type) {
+	case syscall.Errno:
+		errno = e
+	case *os.SyscallError:
+		errno = e.Err.(syscall.Errno)
+	}
 	if errno == syscall.ECONNREFUSED {
 		return true
 	} else if err != nil {
