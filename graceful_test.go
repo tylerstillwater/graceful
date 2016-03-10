@@ -290,6 +290,9 @@ func TestGracefulExplicitStopOverride(t *testing.T) {
 }
 
 func TestBeforeShutdownAndShutdownInitiatedCallbacks(t *testing.T) {
+	var wg sync.WaitGroup
+	wg.Add(1)
+
 	server, l, err := createListener(1 * time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
@@ -301,9 +304,11 @@ func TestBeforeShutdownAndShutdownInitiatedCallbacks(t *testing.T) {
 	cb2 := func() { close(shutdownInitiatedCalled) }
 
 	srv := &Server{Server: server, BeforeShutdown: cb1, ShutdownInitiated: cb2}
-
 	go func() {
-		go srv.Serve(l)
+		srv.Serve(l)
+		wg.Done()
+	}()
+	go func() {
 		time.Sleep(waitTime)
 		srv.Stop(killTime)
 	}()
@@ -329,7 +334,10 @@ func TestBeforeShutdownAndShutdownInitiatedCallbacks(t *testing.T) {
 	if !shutdownInitiated {
 		t.Fatal("shutdownInitiated should be true")
 	}
+
+	wg.Wait()
 }
+
 func hijackingListener(srv *Server) (*http.Server, net.Listener, error) {
 	mux := http.NewServeMux()
 	mux.HandleFunc("/", func(rw http.ResponseWriter, r *http.Request) {
