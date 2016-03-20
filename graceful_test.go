@@ -495,7 +495,9 @@ func TestMultiInterrupts(t *testing.T) {
 		t.Fatal(err)
 	}
 
-	var buf bytes.Buffer
+	var wg sync.WaitGroup
+	var bu bytes.Buffer
+	buf := SyncBuffer{&wg, &bu}
 	var tbuf bytes.Buffer
 	logger := log.New(&buf, "", 0)
 	expected := log.New(&tbuf, "", 0)
@@ -504,6 +506,7 @@ func TestMultiInterrupts(t *testing.T) {
 	go func() { srv.Serve(l) }()
 
 	stop := srv.StopChan()
+	buf.Add(1 + 10) // Expecting 11 log calls
 	c <- os.Interrupt
 	expected.Printf("shutdown initiated")
 	for i := 0; i < 10; i++ {
@@ -513,9 +516,22 @@ func TestMultiInterrupts(t *testing.T) {
 
 	<-stop
 
-	for i, b := range buf.Bytes() {
-		if b != tbuf.Bytes()[i] {
+	wg.Wait()
+	bb, bt := buf.Bytes(), tbuf.Bytes()
+	for i, b := range bb {
+		if b != bt[i] {
 			t.Fatal(fmt.Sprintf("shutdown log incorrect - got '%s', expected '%s'", buf.String(), tbuf.String()))
 		}
 	}
+}
+
+// SyncBuffer calls Done on the embedded wait group after each call to Write.
+type SyncBuffer struct {
+	*sync.WaitGroup
+	*bytes.Buffer
+}
+
+func (buf *SyncBuffer) Write(b []byte) (int, error) {
+	defer buf.Done()
+	return buf.Buffer.Write(b)
 }
