@@ -123,6 +123,21 @@ returns a channel on which you can block while waiting for the server to stop. T
 the server is stopped, allowing your execution to proceed. Multiple goroutines can block on this channel at the
 same time and all will be signalled when stopping is complete.
 
+### Important things to note when setting `timeout` to 0:
+
+If you set the `timeout` to `0`, it waits for all connections to the server to disconnect before shutting down. 
+This means that even though requests over a connection have finished, it is possible for the client to hold the
+connection open and block the server from shutting down indefinitely.
+
+This is especially evident when graceful is used to run HTTP/2 servers. Clients like Chrome and Firefox have been
+observed to hold onto the open connection indefinitely over HTTP/2, preventing the server from shutting down. In 
+addition, there is also the risk of malicious clients holding and keeping the connection alive.
+
+It is understandable that sometimes, you might want to wait for the client indefinitely because they might be
+uploading large files. In these type of cases, it is recommended that you set a reasonable timeout to kill the
+connection, and have the client perform resumable uploads. For example, the client can divide the file into chunks
+and reupload chunks that were in transit when the connection was terminated.
+
 ## Contributing
 
 If you would like to contribute, please:
