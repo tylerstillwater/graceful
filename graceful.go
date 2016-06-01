@@ -34,6 +34,11 @@ type Server struct {
 	// Limit the number of outstanding requests
 	ListenLimit int
 
+	// TCPKeepAlive sets the TCP keep-alive timeouts on accepted
+	// connections. It prunes dead TCP connections ( e.g. closing
+	// laptop mid-download)
+	TCPKeepAlive time.Duration
+
 	// ConnState specifies an optional callback function that is
 	// called when a client connection changes state. This is a proxy
 	// to the underlying http.Server's ConnState, and the original
@@ -85,9 +90,10 @@ type Server struct {
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
 func Run(addr string, timeout time.Duration, n http.Handler) {
 	srv := &Server{
-		Timeout: timeout,
-		Server:  &http.Server{Addr: addr, Handler: n},
-		Logger:  DefaultLogger(),
+		Timeout:      timeout,
+		TCPKeepAlive: 3 * time.Minute,
+		Server:       &http.Server{Addr: addr, Handler: n},
+		Logger:       DefaultLogger(),
 	}
 
 	if err := srv.ListenAndServe(); err != nil {
@@ -104,9 +110,10 @@ func Run(addr string, timeout time.Duration, n http.Handler) {
 // return it instead.
 func RunWithErr(addr string, timeout time.Duration, n http.Handler) error {
 	srv := &Server{
-		Timeout: timeout,
-		Server:  &http.Server{Addr: addr, Handler: n},
-		Logger:  DefaultLogger(),
+		Timeout:      timeout,
+		TCPKeepAlive: 3 * time.Minute,
+		Server:       &http.Server{Addr: addr, Handler: n},
+		Logger:       DefaultLogger(),
 	}
 
 	return srv.ListenAndServe()
@@ -220,6 +227,10 @@ func (srv *Server) Serve(listener net.Listener) error {
 
 	if srv.ListenLimit != 0 {
 		listener = netutil.LimitListener(listener, srv.ListenLimit)
+	}
+
+	if srv.TCPKeepAlive != 0 {
+		listener = tcpKeepAliveListener{listener.(*net.TCPListener), srv.TCPKeepAlive}
 	}
 
 	// Track connection state
@@ -396,4 +407,23 @@ func (srv *Server) shutdown(shutdown chan chan struct{}, kill chan struct{}) {
 		close(srv.stopChan)
 	}
 	srv.chanLock.Unlock()
+}
+
+// tcpKeepAliveListener sets TCP keep-alive timeouts on accepted
+// connections. It's used by ListenAndServe and ListenAndServeTLS so
+// dead TCP connections (e.g. closing laptop mid-download) eventually
+// go away.
+type tcpKeepAliveListener struct {
+	*net.TCPListener
+	keepAlivePeriod time.Duration
+}
+
+func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
+	tc, err := ln.AcceptTCP()
+	if err != nil {
+		return
+	}
+	tc.SetKeepAlive(true)
+	tc.SetKeepAlivePeriod(ln.keepAlivePeriod)
+	return tc, nil
 }
