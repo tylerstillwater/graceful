@@ -2,6 +2,7 @@ package graceful
 
 import (
 	"crypto/tls"
+	"golang.org/x/net/netutil"
 	"log"
 	"net"
 	"net/http"
@@ -10,8 +11,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"golang.org/x/net/netutil"
 )
 
 // Server wraps an http.Server with graceful connection handling.
@@ -159,9 +158,6 @@ func (srv *Server) ListenTLS(certFile, keyFile string) (net.Listener, error) {
 	if srv.TLSConfig != nil {
 		*config = *srv.TLSConfig
 	}
-	if config.NextProtos == nil {
-		config.NextProtos = []string{"http/1.1"}
-	}
 
 	var err error
 	config.Certificates = make([]tls.Certificate, 1)
@@ -174,6 +170,8 @@ func (srv *Server) ListenTLS(certFile, keyFile string) (net.Listener, error) {
 	if err != nil {
 		return nil, err
 	}
+
+	srv.TLSConfig = config
 
 	tlsListener := tls.NewListener(conn, config)
 	return tlsListener, nil
@@ -201,6 +199,8 @@ func (srv *Server) ListenAndServeTLSConfig(config *tls.Config) error {
 	if err != nil {
 		return err
 	}
+
+	srv.TLSConfig = config
 
 	tlsListener := tls.NewListener(conn, config)
 	return srv.Serve(tlsListener)
