@@ -4,12 +4,13 @@ package graceful
 
 import (
 	"crypto/tls"
-	"golang.org/x/net/http2"
 	"net/http"
 	"os"
 	"sync"
 	"testing"
 	"time"
+
+	"golang.org/x/net/http2"
 )
 
 func createServer() *http.Server {
@@ -60,8 +61,10 @@ func TestHTTP2ListenAndServeTLS(t *testing.T) {
 
 	server := createServer()
 
+	var srv *Server
 	go func() {
-		srv := &Server{Timeout: killTime, Server: server, interrupt: c}
+		// set timeout of 0 to test idle connection closing
+		srv = &Server{Timeout: 0, Server: server, interrupt: c}
 		srv.ListenAndServeTLS("test-fixtures/cert.crt", "test-fixtures/key.pem")
 		wg.Done()
 	}()
@@ -71,6 +74,16 @@ func TestHTTP2ListenAndServeTLS(t *testing.T) {
 	wg.Add(1)
 	go checkIfConnectionToServerIsHTTP2(t, &wg, c)
 	wg.Wait()
+
+	c <- os.Interrupt // kill the server to close idle connections
+
+	// block on the stopChan until the server has shut down
+	select {
+	case <-srv.StopChan():
+	case <-time.After(killTime * 2):
+		t.Fatal("Timed out while waiting for explicit stop to complete")
+	}
+
 }
 
 func TestHTTP2ListenAndServeTLSConfig(t *testing.T) {
