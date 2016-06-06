@@ -233,6 +233,9 @@ func (srv *Server) Serve(listener net.Listener) error {
 		listener = tcpKeepAliveListener{listener.(*net.TCPListener), srv.TCPKeepAlive}
 	}
 
+	// Make our stopchan
+	srv.StopChan()
+
 	// Track connection state
 	add := make(chan net.Conn)
 	remove := make(chan net.Conn)
