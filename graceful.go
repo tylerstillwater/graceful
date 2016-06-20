@@ -62,6 +62,10 @@ type Server struct {
 	// Logger used to notify of errors on startup and on stop.
 	Logger *log.Logger
 
+	// LogFunc can be assigned with a logging function of your choice, allowing
+	// you to use whatever logging approach you would like
+	LogFunc func(format string, args ...interface{})
+
 	// Interrupted is true if the server is handling a SIGINT or SIGTERM
 	// signal and is thus shutting down.
 	Interrupted bool
@@ -96,12 +100,13 @@ func Run(addr string, timeout time.Duration, n http.Handler) {
 		Timeout:      timeout,
 		TCPKeepAlive: 3 * time.Minute,
 		Server:       &http.Server{Addr: addr, Handler: n},
-		Logger:       DefaultLogger(),
+		// Logger:       DefaultLogger(),
 	}
 
 	if err := srv.ListenAndServe(); err != nil {
 		if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
-			srv.Logger.Fatal(err)
+			srv.log("%s", err)
+			os.Exit(1)
 		}
 	}
 
@@ -405,9 +410,11 @@ func (srv *Server) handleInterrupt(interrupt chan os.Signal, quitting chan struc
 	}
 }
 
-func (srv *Server) log(fmt string, v ...interface{}) {
-	if srv.Logger != nil {
-		srv.Logger.Printf(fmt, v...)
+func (srv *Server) log(format string, args ...interface{}) {
+	if srv.LogFunc != nil {
+		srv.LogFunc(format, args...)
+	} else if srv.Logger != nil {
+		srv.Logger.Printf(format, args...)
 	}
 }
 

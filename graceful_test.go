@@ -525,6 +525,28 @@ func TestMultiInterrupts(t *testing.T) {
 	}
 }
 
+func TestLogFunc(t *testing.T) {
+	c := make(chan os.Signal, 1)
+
+	server, l, err := createListener(killTime * 10)
+	if err != nil {
+		t.Fatal(err)
+	}
+	var called bool
+	srv := &Server{Timeout: killTime, Server: server,
+		LogFunc: func(format string, args ...interface{}) {
+			called = true
+		}, interrupt: c}
+	stop := srv.StopChan()
+	go func() { srv.Serve(l) }()
+	c <- os.Interrupt
+	<-stop
+
+	if called != true {
+		t.Fatal("Expected LogFunc to be called.")
+	}
+}
+
 // SyncBuffer calls Done on the embedded wait group after each call to Write.
 type SyncBuffer struct {
 	*sync.WaitGroup
