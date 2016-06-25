@@ -46,8 +46,8 @@ type Server struct {
 	ConnState func(net.Conn, http.ConnState)
 
 	// BeforeShutdown is an optional callback function that is called
-	// before the listener is closed.
-	BeforeShutdown func()
+	// before the listener is closed. Returns true if shutdown is allowed
+	BeforeShutdown func() bool
 
 	// ShutdownInitiated is an optional callback function that is called
 	// when shutdown is initiated. It can be used to notify the client
@@ -395,7 +395,10 @@ func (srv *Server) handleInterrupt(interrupt chan os.Signal, quitting chan struc
 		srv.log("shutdown initiated")
 		srv.Interrupted = true
 		if srv.BeforeShutdown != nil {
-			srv.BeforeShutdown()
+			if !srv.BeforeShutdown() {
+				srv.Interrupted = false
+				continue
+			}
 		}
 
 		close(quitting)

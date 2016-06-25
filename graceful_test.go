@@ -313,7 +313,7 @@ func TestBeforeShutdownAndShutdownInitiatedCallbacks(t *testing.T) {
 	}
 
 	beforeShutdownCalled := make(chan struct{})
-	cb1 := func() { close(beforeShutdownCalled) }
+	cb1 := func() bool { close(beforeShutdownCalled); return true }
 	shutdownInitiatedCalled := make(chan struct{})
 	cb2 := func() { close(shutdownInitiatedCalled) }
 
