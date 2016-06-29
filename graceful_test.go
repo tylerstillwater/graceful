@@ -24,13 +24,12 @@ var (
 )
 
 func runQuery(t *testing.T, expected int, shouldErr bool, wg *sync.WaitGroup, once *sync.Once) {
-	wg.Add(1)
 	defer wg.Done()
 	client := http.Client{}
 	r, err := client.Get("http://localhost:9654")
 	if shouldErr && err == nil {
 		once.Do(func() {
-			t.Fatal("Expected an error but none was encountered.")
+			t.Error("Expected an error but none was encountered.")
 		})
 	} else if shouldErr && err != nil {
 		if checkErr(t, err, once) {
@@ -39,11 +38,11 @@ func runQuery(t *testing.T, expected int, shouldErr bool, wg *sync.WaitGroup, on
 	}
 	if r != nil && r.StatusCode != expected {
 		once.Do(func() {
-			t.Fatalf("Incorrect status code on response. Expected %d. Got %d", expected, r.StatusCode)
+			t.Errorf("Incorrect status code on response. Expected %d. Got %d", expected, r.StatusCode)
 		})
 	} else if r == nil {
 		once.Do(func() {
-			t.Fatal("No response when a response was expected.")
+			t.Error("No response when a response was expected.")
 		})
 	}
 }
@@ -65,11 +64,14 @@ func checkErr(t *testing.T, err error, once *sync.Once) bool {
 			return true
 		} else if err != nil {
 			once.Do(func() {
-				t.Fatal("Error on Get:", err)
+				t.Error("Error on Get:", err)
 			})
 		}
 	default:
 		if strings.Contains(err.Error(), "transport closed before response was received") {
+			return true
+		}
+		if strings.Contains(err.Error(), "server closed connection") {
 			return true
 		}
 		fmt.Printf("unknown err: %s, %#v\n", err, err)
@@ -86,14 +88,15 @@ func createListener(sleep time.Duration) (*http.Server, net.Listener, error) {
 
 	server := &http.Server{Addr: ":9654", Handler: mux}
 	l, err := net.Listen("tcp", ":9654")
-	if err != nil {
-	}
 	return server, l, err
 }
 
 func launchTestQueries(t *testing.T, wg *sync.WaitGroup, c chan os.Signal) {
+	defer wg.Done()
 	var once sync.Once
+
 	for i := 0; i < 8; i++ {
+		wg.Add(1)
 		go runQuery(t, http.StatusOK, false, wg, &once)
 	}
 
@@ -102,120 +105,114 @@ func launchTestQueries(t *testing.T, wg *sync.WaitGroup, c chan os.Signal) {
 	time.Sleep(waitTime)
 
 	for i := 0; i < 8; i++ {
+		wg.Add(1)
 		go runQuery(t, 0, true, wg, &once)
 	}
-
-	wg.Done()
 }
 
 func TestGracefulRun(t *testing.T) {
-	c := make(chan os.Signal, 1)
-
 	var wg sync.WaitGroup
-	wg.Add(1)
+	defer wg.Wait()
 
+	c := make(chan os.Signal, 1)
 	server, l, err := createListener(killTime / 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		srv := &Server{Timeout: killTime, Server: server, interrupt: c}
 		srv.Serve(l)
-		wg.Done()
 	}()
 
 	wg.Add(1)
 	go launchTestQueries(t, &wg, c)
-	wg.Wait()
 }
 
 func TestGracefulRunTimesOut(t *testing.T) {
-	c := make(chan os.Signal, 1)
-
 	var wg sync.WaitGroup
-	wg.Add(1)
+	defer wg.Wait()
 
+	c := make(chan os.Signal, 1)
 	server, l, err := createListener(killTime * 10)
 	if err != nil {
 		t.Fatal(err)
 	}
 
-	go func() {
-		srv := &Server{Timeout: killTime, Server: server, interrupt: c}
-		srv.Serve(l)
-		wg.Done()
-	}()
-
-	var once sync.Once
 	wg.Add(1)
 	go func() {
+		defer wg.Done()
+		srv := &Server{Timeout: killTime, Server: server, interrupt: c}
+		srv.Serve(l)
+	}()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		var once sync.Once
+
 		for i := 0; i < 8; i++ {
-			go runQuery(t, 0, true, &wg, &once)
+			wg.Add(1)
+			go runQuery(t, 0, true, &wg, &once) // THIS FAILS
 		}
+
 		time.Sleep(waitTime)
 		c <- os.Interrupt
 		time.Sleep(waitTime)
+
 		for i := 0; i < 8; i++ {
+			wg.Add(1)
 			go runQuery(t, 0, true, &wg, &once)
 		}
-		wg.Done()
 	}()
-
-	wg.Wait()
-
 }
 
 func TestGracefulRunDoesntTimeOut(t *testing.T) {
-	c := make(chan os.Signal, 1)
-
 	var wg sync.WaitGroup
-	wg.Add(1)
+	defer wg.Wait()
 
+	c := make(chan os.Signal, 1)
 	server, l, err := createListener(killTime * 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		srv := &Server{Timeout: 0, Server: server, interrupt: c}
 		srv.Serve(l)
-		wg.Done()
 	}()
 
 	wg.Add(1)
 	go launchTestQueries(t, &wg, c)
-	wg.Wait()
 }
 
 func TestGracefulRunNoRequests(t *testing.T) {
-	c := make(chan os.Signal, 1)
-
 	var wg sync.WaitGroup
-	wg.Add(1)
+	defer wg.Wait()
 
+	c := make(chan os.Signal, 1)
 	server, l, err := createListener(killTime * 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		srv := &Server{Timeout: 0, Server: server, interrupt: c}
 		srv.Serve(l)
-		wg.Done()
 	}()
 
 	c <- os.Interrupt
-
-	wg.Wait()
-
 }
 
 func TestGracefulForwardsConnState(t *testing.T) {
-	c := make(chan os.Signal, 1)
-	states := make(map[http.ConnState]int)
 	var stateLock sync.Mutex
-
+	states := make(map[http.ConnState]int)
 	connState := func(conn net.Conn, state http.ConnState) {
 		stateLock.Lock()
 		states[state]++
@@ -223,7 +220,7 @@ func TestGracefulForwardsConnState(t *testing.T) {
 	}
 
 	var wg sync.WaitGroup
-	wg.Add(1)
+	defer wg.Wait()
 
 	expected := map[http.ConnState]int{
 		http.StateNew:    8,
@@ -231,12 +228,15 @@ func TestGracefulForwardsConnState(t *testing.T) {
 		http.StateClosed: 8,
 	}
 
+	c := make(chan os.Signal, 1)
 	server, l, err := createListener(killTime / 2)
 	if err != nil {
 		t.Fatal(err)
 	}
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		srv := &Server{
 			ConnState: connState,
 			Timeout:   killTime,
@@ -244,8 +244,6 @@ func TestGracefulForwardsConnState(t *testing.T) {
 			interrupt: c,
 		}
 		srv.Serve(l)
-
-		wg.Done()
 	}()
 
 	wg.Add(1)
@@ -305,7 +303,7 @@ func TestGracefulExplicitStopOverride(t *testing.T) {
 
 func TestBeforeShutdownAndShutdownInitiatedCallbacks(t *testing.T) {
 	var wg sync.WaitGroup
-	wg.Add(1)
+	defer wg.Wait()
 
 	server, l, err := createListener(1 * time.Millisecond)
 	if err != nil {
@@ -317,12 +315,14 @@ func TestBeforeShutdownAndShutdownInitiatedCallbacks(t *testing.T) {
 	shutdownInitiatedCalled := make(chan struct{})
 	cb2 := func() { close(shutdownInitiatedCalled) }
 
+	wg.Add(2)
 	srv := &Server{Server: server, BeforeShutdown: cb1, ShutdownInitiated: cb2}
 	go func() {
+		defer wg.Done()
 		srv.Serve(l)
-		wg.Done()
 	}()
 	go func() {
+		defer wg.Done()
 		time.Sleep(waitTime)
 		srv.Stop(killTime)
 	}()
@@ -348,8 +348,6 @@ func TestBeforeShutdownAndShutdownInitiatedCallbacks(t *testing.T) {
 	if !shutdownInitiated {
 		t.Fatal("shutdownInitiated should be true")
 	}
-
-	wg.Wait()
 }
 
 func hijackingListener(srv *Server) (*http.Server, net.Listener, error) {
@@ -373,11 +371,10 @@ func hijackingListener(srv *Server) (*http.Server, net.Listener, error) {
 }
 
 func TestNotifyClosed(t *testing.T) {
-	c := make(chan os.Signal, 1)
-
 	var wg sync.WaitGroup
-	wg.Add(1)
+	defer wg.Wait()
 
+	c := make(chan os.Signal, 1)
 	srv := &Server{Timeout: killTime, interrupt: c}
 	server, l, err := hijackingListener(srv)
 	if err != nil {
@@ -386,13 +383,15 @@ func TestNotifyClosed(t *testing.T) {
 
 	srv.Server = server
 
+	wg.Add(1)
 	go func() {
+		defer wg.Done()
 		srv.Serve(l)
-		wg.Done()
 	}()
 
 	var once sync.Once
 	for i := 0; i < 8; i++ {
+		wg.Add(1)
 		runQuery(t, http.StatusOK, false, &wg, &once)
 	}
 
@@ -412,8 +411,10 @@ func TestNotifyClosed(t *testing.T) {
 }
 
 func TestStopDeadlock(t *testing.T) {
-	c := make(chan struct{})
+	var wg sync.WaitGroup
+	defer wg.Wait()
 
+	c := make(chan struct{})
 	server, l, err := createListener(1 * time.Millisecond)
 	if err != nil {
 		t.Fatal(err)
@@ -421,12 +422,14 @@ func TestStopDeadlock(t *testing.T) {
 
 	srv := &Server{Server: server, NoSignalHandling: true}
 
+	wg.Add(2)
 	go func() {
+		defer wg.Done()
 		time.Sleep(waitTime)
 		srv.Serve(l)
 	}()
-
 	go func() {
+		defer wg.Done()
 		srv.Stop(0)
 		close(c)
 	}()
