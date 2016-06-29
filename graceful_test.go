@@ -17,6 +17,9 @@ import (
 	"time"
 )
 
+// The tests will run a test server on this port.
+const port = 9654
+
 var (
 	killTime    = 500 * time.Millisecond
 	timeoutTime = 1000 * time.Millisecond
@@ -26,7 +29,7 @@ var (
 func runQuery(t *testing.T, expected int, shouldErr bool, wg *sync.WaitGroup, once *sync.Once) {
 	defer wg.Done()
 	client := http.Client{}
-	r, err := client.Get("http://localhost:9654")
+	r, err := client.Get(fmt.Sprintf("http://localhost:%d", port))
 	if shouldErr && err == nil {
 		once.Do(func() {
 			t.Error("Expected an error but none was encountered.")
@@ -86,8 +89,8 @@ func createListener(sleep time.Duration) (*http.Server, net.Listener, error) {
 		rw.WriteHeader(http.StatusOK)
 	})
 
-	server := &http.Server{Addr: ":9654", Handler: mux}
-	l, err := net.Listen("tcp", ":9654")
+	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: mux}
+	l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	return server, l, err
 }
 
@@ -155,7 +158,7 @@ func TestGracefulRunTimesOut(t *testing.T) {
 
 		for i := 0; i < 8; i++ {
 			wg.Add(1)
-			go runQuery(t, 0, true, &wg, &once) // THIS FAILS
+			go runQuery(t, 0, true, &wg, &once)
 		}
 
 		time.Sleep(waitTime)
@@ -365,8 +368,8 @@ func hijackingListener(srv *Server) (*http.Server, net.Listener, error) {
 		bufrw.Flush()
 	})
 
-	server := &http.Server{Addr: ":9654", Handler: mux}
-	l, err := net.Listen("tcp", ":9654")
+	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: mux}
+	l, err := net.Listen("tcp", fmt.Sprintf(":%d", port))
 	return server, l, err
 }
 

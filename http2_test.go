@@ -4,6 +4,7 @@ package graceful
 
 import (
 	"crypto/tls"
+	"fmt"
 	"net/http"
 	"os"
 	"sync"
@@ -19,7 +20,7 @@ func createServer() *http.Server {
 		rw.WriteHeader(http.StatusOK)
 	})
 
-	server := &http.Server{Addr: ":9654", Handler: mux}
+	server := &http.Server{Addr: fmt.Sprintf(":%d", port), Handler: mux}
 
 	return server
 }
@@ -39,7 +40,7 @@ func checkIfConnectionToServerIsHTTP2(t *testing.T, wg *sync.WaitGroup, c chan o
 	}
 
 	client := http.Client{Transport: tr}
-	r, err := client.Get("https://localhost:9654")
+	r, err := client.Get(fmt.Sprintf("https://localhost:%d", port))
 
 	c <- os.Interrupt
 
