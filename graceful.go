@@ -10,8 +10,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"golang.org/x/net/netutil"
 )
 
 // Server wraps an http.Server with graceful connection handling.
@@ -235,7 +233,7 @@ func Serve(server *http.Server, l net.Listener, timeout time.Duration) error {
 func (srv *Server) Serve(listener net.Listener) error {
 
 	if srv.ListenLimit != 0 {
-		listener = netutil.LimitListener(listener, srv.ListenLimit)
+		listener = LimitListener(listener, srv.ListenLimit)
 	}
 
 	if srv.TCPKeepAlive != 0 {
