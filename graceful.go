@@ -259,6 +259,10 @@ func (srv *Server) Serve(listener net.Listener) error {
 		case http.StateClosed, http.StateHijacked:
 			remove <- conn
 		}
+
+		srv.stopLock.Lock()
+		defer srv.stopLock.Unlock()
+
 		if srv.ConnState != nil {
 			srv.ConnState(conn, state)
 		}
@@ -364,6 +368,9 @@ func (srv *Server) manageConnections(add, idle, remove chan net.Conn, shutdown c
 				}
 			}
 		case <-kill:
+			srv.stopLock.Lock()
+			defer srv.stopLock.Unlock()
+
 			srv.Server.ConnState = nil
 			for k := range srv.connections {
 				if err := k.Close(); err != nil {
