@@ -237,7 +237,7 @@ func (srv *Server) Serve(listener net.Listener) error {
 	}
 
 	if srv.TCPKeepAlive != 0 {
-		listener = tcpKeepAliveListener{listener.(*net.TCPListener), srv.TCPKeepAlive}
+		listener = keepAliveListener{listener, srv.TCPKeepAlive}
 	}
 
 	// Make our stopchan
@@ -438,21 +438,28 @@ func (srv *Server) shutdown(shutdown chan chan struct{}, kill chan struct{}) {
 	srv.chanLock.Unlock()
 }
 
-// tcpKeepAliveListener sets TCP keep-alive timeouts on accepted
+type keepAliveConn interface {
+	SetKeepAlive(bool) error
+	SetKeepAlivePeriod(d time.Duration) error
+}
+
+// keepAliveListener sets TCP keep-alive timeouts on accepted
 // connections. It's used by ListenAndServe and ListenAndServeTLS so
 // dead TCP connections (e.g. closing laptop mid-download) eventually
 // go away.
-type tcpKeepAliveListener struct {
-	*net.TCPListener
+type keepAliveListener struct {
+	net.Listener
 	keepAlivePeriod time.Duration
 }
 
-func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
-	tc, err := ln.AcceptTCP()
+func (ln keepAliveListener) Accept() (net.Conn, error) {
+	c, err := ln.Listener.Accept()
 	if err != nil {
-		return
+		return nil, err
 	}
-	tc.SetKeepAlive(true)
-	tc.SetKeepAlivePeriod(ln.keepAlivePeriod)
-	return tc, nil
+
+	kac := c.(keepAliveConn)
+	kac.SetKeepAlive(true)
+	kac.SetKeepAlivePeriod(ln.keepAlivePeriod)
+	return c, nil
 }

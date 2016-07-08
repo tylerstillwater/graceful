@@ -15,9 +15,14 @@
 package graceful
 
 import (
+	"errors"
 	"net"
 	"sync"
+	"time"
 )
+
+// ErrNotTCP indicates that network connection is not a TCP connection.
+var ErrNotTCP = errors.New("only tcp connections have keepalive")
 
 // LimitListener returns a Listener that accepts at most n simultaneous
 // connections from the provided Listener.
@@ -53,4 +58,20 @@ func (l *limitListenerConn) Close() error {
 	err := l.Conn.Close()
 	l.releaseOnce.Do(l.release)
 	return err
+}
+
+func (l *limitListenerConn) SetKeepAlive(doKeepAlive bool) error {
+	tcpc, ok := l.Conn.(*net.TCPConn)
+	if !ok {
+		return ErrNotTCP
+	}
+	return tcpc.SetKeepAlive(doKeepAlive)
+}
+
+func (l *limitListenerConn) SetKeepAlivePeriod(d time.Duration) error {
+	tcpc, ok := l.Conn.(*net.TCPConn)
+	if !ok {
+		return ErrNotTCP
+	}
+	return tcpc.SetKeepAlivePeriod(d)
 }
