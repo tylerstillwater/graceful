@@ -137,6 +137,33 @@ func TestGracefulRun(t *testing.T) {
 	go launchTestQueries(t, &wg, c)
 }
 
+func TestGracefulRunLimitKeepAliveListener(t *testing.T) {
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	c := make(chan os.Signal, 1)
+	server, l, err := createListener(killTime / 2)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		srv := &Server{
+			Timeout:      killTime,
+			ListenLimit:  concurrentRequestN,
+			TCPKeepAlive: 1 * time.Second,
+			Server:       server,
+			interrupt:    c,
+		}
+		srv.Serve(l)
+	}()
+
+	wg.Add(1)
+	go launchTestQueries(t, &wg, c)
+}
+
 func TestGracefulRunTimesOut(t *testing.T) {
 	var wg sync.WaitGroup
 	defer wg.Wait()
