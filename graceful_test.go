@@ -17,8 +17,11 @@ import (
 	"time"
 )
 
-// The tests will run a test server on this port.
-const port = 9654
+const (
+	// The tests will run a test server on this port.
+	port               = 9654
+	concurrentRequestN = 8
+)
 
 var (
 	killTime    = 500 * time.Millisecond
@@ -98,7 +101,7 @@ func launchTestQueries(t *testing.T, wg *sync.WaitGroup, c chan os.Signal) {
 	defer wg.Done()
 	var once sync.Once
 
-	for i := 0; i < 8; i++ {
+	for i := 0; i < concurrentRequestN; i++ {
 		wg.Add(1)
 		go runQuery(t, http.StatusOK, false, wg, &once)
 	}
@@ -107,7 +110,7 @@ func launchTestQueries(t *testing.T, wg *sync.WaitGroup, c chan os.Signal) {
 	c <- os.Interrupt
 	time.Sleep(waitTime)
 
-	for i := 0; i < 8; i++ {
+	for i := 0; i < concurrentRequestN; i++ {
 		wg.Add(1)
 		go runQuery(t, 0, true, wg, &once)
 	}
@@ -156,7 +159,7 @@ func TestGracefulRunTimesOut(t *testing.T) {
 		defer wg.Done()
 		var once sync.Once
 
-		for i := 0; i < 8; i++ {
+		for i := 0; i < concurrentRequestN; i++ {
 			wg.Add(1)
 			go runQuery(t, 0, true, &wg, &once)
 		}
@@ -165,7 +168,7 @@ func TestGracefulRunTimesOut(t *testing.T) {
 		c <- os.Interrupt
 		time.Sleep(waitTime)
 
-		for i := 0; i < 8; i++ {
+		for i := 0; i < concurrentRequestN; i++ {
 			wg.Add(1)
 			go runQuery(t, 0, true, &wg, &once)
 		}
@@ -226,9 +229,9 @@ func TestGracefulForwardsConnState(t *testing.T) {
 	defer wg.Wait()
 
 	expected := map[http.ConnState]int{
-		http.StateNew:    8,
-		http.StateActive: 8,
-		http.StateClosed: 8,
+		http.StateNew:    concurrentRequestN,
+		http.StateActive: concurrentRequestN,
+		http.StateClosed: concurrentRequestN,
 	}
 
 	c := make(chan os.Signal, 1)
@@ -393,7 +396,7 @@ func TestNotifyClosed(t *testing.T) {
 	}()
 
 	var once sync.Once
-	for i := 0; i < 8; i++ {
+	for i := 0; i < concurrentRequestN; i++ {
 		wg.Add(1)
 		runQuery(t, http.StatusOK, false, &wg, &once)
 	}
