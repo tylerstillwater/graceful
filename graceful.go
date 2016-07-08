@@ -105,7 +105,7 @@ func Run(addr string, timeout time.Duration, n http.Handler) {
 
 	if err := srv.ListenAndServe(); err != nil {
 		if opErr, ok := err.(*net.OpError); !ok || (ok && opErr.Op != "accept") {
-			srv.log("%s", err)
+			srv.logf("%s", err)
 			os.Exit(1)
 		}
 	}
@@ -360,14 +360,14 @@ func (srv *Server) manageConnections(add, idle, remove chan net.Conn, shutdown c
 			// hit their idle timeout.
 			for k := range srv.idleConnections {
 				if err := k.Close(); err != nil {
-					srv.log("[ERROR] %s", err)
+					srv.logf("[ERROR] %s", err)
 				}
 			}
 		case <-kill:
 			srv.Server.ConnState = nil
 			for k := range srv.connections {
 				if err := k.Close(); err != nil {
-					srv.log("[ERROR] %s", err)
+					srv.logf("[ERROR] %s", err)
 				}
 			}
 			return
@@ -389,10 +389,10 @@ func (srv *Server) interruptChan() chan os.Signal {
 func (srv *Server) handleInterrupt(interrupt chan os.Signal, quitting chan struct{}, listener net.Listener) {
 	for _ = range interrupt {
 		if srv.Interrupted {
-			srv.log("already shutting down")
+			srv.logf("already shutting down")
 			continue
 		}
-		srv.log("shutdown initiated")
+		srv.logf("shutdown initiated")
 		srv.Interrupted = true
 		if srv.BeforeShutdown != nil {
 			srv.BeforeShutdown()
@@ -401,7 +401,7 @@ func (srv *Server) handleInterrupt(interrupt chan os.Signal, quitting chan struc
 		close(quitting)
 		srv.SetKeepAlivesEnabled(false)
 		if err := listener.Close(); err != nil {
-			srv.log("[ERROR] %s", err)
+			srv.logf("[ERROR] %s", err)
 		}
 
 		if srv.ShutdownInitiated != nil {
@@ -410,7 +410,7 @@ func (srv *Server) handleInterrupt(interrupt chan os.Signal, quitting chan struc
 	}
 }
 
-func (srv *Server) log(format string, args ...interface{}) {
+func (srv *Server) logf(format string, args ...interface{}) {
 	if srv.LogFunc != nil {
 		srv.LogFunc(format, args...)
 	} else if srv.Logger != nil {
