@@ -21,12 +21,9 @@ const (
 	// The tests will run a test server on this port.
 	port               = 9654
 	concurrentRequestN = 8
-)
-
-var (
-	killTime    = 500 * time.Millisecond
-	timeoutTime = 1000 * time.Millisecond
-	waitTime    = 100 * time.Millisecond
+	killTime           = 500 * time.Millisecond
+	timeoutTime        = 1000 * time.Millisecond
+	waitTime           = 100 * time.Millisecond
 )
 
 func runQuery(t *testing.T, expected int, shouldErr bool, wg *sync.WaitGroup, once *sync.Once) {
