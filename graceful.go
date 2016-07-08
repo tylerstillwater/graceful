@@ -10,8 +10,6 @@ import (
 	"sync"
 	"syscall"
 	"time"
-
-	"golang.org/x/net/netutil"
 )
 
 // Server wraps an http.Server with graceful connection handling.
@@ -235,11 +233,11 @@ func Serve(server *http.Server, l net.Listener, timeout time.Duration) error {
 func (srv *Server) Serve(listener net.Listener) error {
 
 	if srv.ListenLimit != 0 {
-		listener = netutil.LimitListener(listener, srv.ListenLimit)
+		listener = LimitListener(listener, srv.ListenLimit)
 	}
 
 	if srv.TCPKeepAlive != 0 {
-		listener = tcpKeepAliveListener{listener.(*net.TCPListener), srv.TCPKeepAlive}
+		listener = keepAliveListener{listener, srv.TCPKeepAlive}
 	}
 
 	// Make our stopchan
@@ -438,23 +436,4 @@ func (srv *Server) shutdown(shutdown chan chan struct{}, kill chan struct{}) {
 		close(srv.stopChan)
 	}
 	srv.chanLock.Unlock()
-}
-
-// tcpKeepAliveListener sets TCP keep-alive timeouts on accepted
-// connections. It's used by ListenAndServe and ListenAndServeTLS so
-// dead TCP connections (e.g. closing laptop mid-download) eventually
-// go away.
-type tcpKeepAliveListener struct {
-	*net.TCPListener
-	keepAlivePeriod time.Duration
-}
-
-func (ln tcpKeepAliveListener) Accept() (c net.Conn, err error) {
-	tc, err := ln.AcceptTCP()
-	if err != nil {
-		return
-	}
-	tc.SetKeepAlive(true)
-	tc.SetKeepAlivePeriod(ln.keepAlivePeriod)
-	return tc, nil
 }
