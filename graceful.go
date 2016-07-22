@@ -246,12 +246,15 @@ func (srv *Server) Serve(listener net.Listener) error {
 	// Track connection state
 	add := make(chan net.Conn)
 	idle := make(chan net.Conn)
+	active := make(chan net.Conn)
 	remove := make(chan net.Conn)
 
 	srv.Server.ConnState = func(conn net.Conn, state http.ConnState) {
 		switch state {
 		case http.StateNew:
 			add <- conn
+		case http.StateActive:
+			active <- conn
 		case http.StateIdle:
 			idle <- conn
 		case http.StateClosed, http.StateHijacked:
@@ -269,7 +272,7 @@ func (srv *Server) Serve(listener net.Listener) error {
 	// Manage open connections
 	shutdown := make(chan chan struct{})
 	kill := make(chan struct{})
-	go srv.manageConnections(add, idle, remove, shutdown, kill)
+	go srv.manageConnections(add, idle, active, remove, shutdown, kill)
 
 	interrupt := srv.interruptChan()
 	// Set up the interrupt handler
@@ -334,7 +337,7 @@ func DefaultLogger() *log.Logger {
 	return log.New(os.Stderr, "[graceful] ", 0)
 }
 
-func (srv *Server) manageConnections(add, idle, remove chan net.Conn, shutdown chan chan struct{}, kill chan struct{}) {
+func (srv *Server) manageConnections(add, idle, active, remove chan net.Conn, shutdown chan chan struct{}, kill chan struct{}) {
 	var done chan struct{}
 	srv.connections = map[net.Conn]struct{}{}
 	srv.idleConnections = map[net.Conn]struct{}{}
@@ -344,6 +347,8 @@ func (srv *Server) manageConnections(add, idle, remove chan net.Conn, shutdown c
 			srv.connections[conn] = struct{}{}
 		case conn := <-idle:
 			srv.idleConnections[conn] = struct{}{}
+		case conn := <-active:
+			delete(srv.idleConnections, conn)
 		case conn := <-remove:
 			delete(srv.connections, conn)
 			delete(srv.idleConnections, conn)
