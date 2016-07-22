@@ -220,6 +220,49 @@ func TestGracefulRunDoesntTimeOut(t *testing.T) {
 	go launchTestQueries(t, &wg, c)
 }
 
+func TestGracefulRunDoesntTimeOutAfterConnectionCreated(t *testing.T) {
+	var wg sync.WaitGroup
+	defer wg.Wait()
+
+	c := make(chan os.Signal, 1)
+	server, l, err := createListener(killTime)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		srv := &Server{Timeout: 0, Server: server, interrupt: c}
+		srv.Serve(l)
+	}()
+	time.Sleep(waitTime)
+
+	// Make a sample first request. The connection will be left idle.
+	resp, err := http.Get(fmt.Sprintf("http://localhost:%d", port))
+	if err != nil {
+		panic(fmt.Sprintf("first request failed: %v", err))
+	}
+	resp.Body.Close()
+
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+
+		// With idle connections improperly handled, the server doesn't wait for this
+		// to complete and the request fails. It should be allowed to complete successfully.
+		_, err := http.Get(fmt.Sprintf("http://localhost:%d", port))
+		if err != nil {
+			t.Errorf("Get failed: %v", err)
+		}
+	}()
+
+	// Ensure the request goes out
+	time.Sleep(waitTime)
+	c <- os.Interrupt
+	wg.Wait()
+}
+
 func TestGracefulRunNoRequests(t *testing.T) {
 	var wg sync.WaitGroup
 	defer wg.Wait()
