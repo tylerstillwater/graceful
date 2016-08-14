@@ -141,12 +141,12 @@ func (srv *Server) ListenAndServe() error {
 	if addr == "" {
 		addr = ":http"
 	}
-	l, err := net.Listen("tcp", addr)
+	conn, err := srv.newTCPListener(addr)
 	if err != nil {
 		return err
 	}
 
-	return srv.Serve(l)
+	return srv.Serve(conn)
 }
 
 // ListenAndServeTLS is equivalent to http.Server.ListenAndServeTLS with graceful shutdown enabled.
@@ -180,7 +180,7 @@ func (srv *Server) ListenTLS(certFile, keyFile string) (net.Listener, error) {
 		return nil, err
 	}
 
-	conn, err := net.Listen("tcp", addr)
+	conn, err := srv.newTCPListener(addr)
 	if err != nil {
 		return nil, err
 	}
@@ -209,7 +209,7 @@ func (srv *Server) ListenAndServeTLSConfig(config *tls.Config) error {
 		addr = ":https"
 	}
 
-	conn, err := net.Listen("tcp", addr)
+	conn, err := srv.newTCPListener(addr)
 	if err != nil {
 		return err
 	}
@@ -226,6 +226,7 @@ func (srv *Server) ListenAndServeTLSConfig(config *tls.Config) error {
 // If timeout is 0, the server never times out. It waits for all active requests to finish.
 func Serve(server *http.Server, l net.Listener, timeout time.Duration) error {
 	srv := &Server{Timeout: timeout, Server: server, Logger: DefaultLogger()}
+
 	return srv.Serve(l)
 }
 
@@ -234,10 +235,6 @@ func (srv *Server) Serve(listener net.Listener) error {
 
 	if srv.ListenLimit != 0 {
 		listener = LimitListener(listener, srv.ListenLimit)
-	}
-
-	if srv.TCPKeepAlive != 0 {
-		listener = keepAliveListener{listener, srv.TCPKeepAlive}
 	}
 
 	// Make our stopchan
@@ -451,4 +448,15 @@ func (srv *Server) shutdown(shutdown chan chan struct{}, kill chan struct{}) {
 		close(srv.stopChan)
 	}
 	srv.chanLock.Unlock()
+}
+
+func (srv *Server) newTCPListener(addr string) (net.Listener, error) {
+	conn, err := net.Listen("tcp", addr)
+	if err != nil {
+		return conn, err
+	}
+	if srv.TCPKeepAlive != 0 {
+		conn = keepAliveListener{conn, srv.TCPKeepAlive}
+	}
+	return conn, nil
 }
