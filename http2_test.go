@@ -65,7 +65,7 @@ func TestHTTP2ListenAndServeTLS(t *testing.T) {
 	var srv *Server
 	go func() {
 		// set timeout of 0 to test idle connection closing
-		srv = &Server{Timeout: 0, Server: server, interrupt: c}
+		srv = &Server{Timeout: 0, TCPKeepAlive: 1 * time.Minute, Server: server, interrupt: c}
 		srv.ListenAndServeTLS("test-fixtures/cert.crt", "test-fixtures/key.pem")
 		wg.Done()
 	}()
@@ -98,7 +98,7 @@ func TestHTTP2ListenAndServeTLSConfig(t *testing.T) {
 	server2 := createServer()
 
 	go func() {
-		srv := &Server{Timeout: killTime, Server: server2, interrupt: c}
+		srv := &Server{Timeout: killTime, TCPKeepAlive: 1 * time.Minute, Server: server2, interrupt: c}
 
 		cert, err := tls.LoadX509KeyPair("test-fixtures/cert.crt", "test-fixtures/key.pem")
 
