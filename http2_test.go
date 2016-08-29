@@ -48,7 +48,7 @@ func checkIfConnectionToServerIsHTTP2(t *testing.T, wg *sync.WaitGroup, c chan o
 		t.Fatalf("Error encountered while connecting to test server: %s", err)
 	}
 
-	if r.Proto != "HTTP/2.0" {
+	if !r.ProtoAtLeast(2, 0) {
 		t.Fatalf("Expected HTTP/2 connection to server, but connection was using %s", r.Proto)
 	}
 }
@@ -108,6 +108,7 @@ func TestHTTP2ListenAndServeTLSConfig(t *testing.T) {
 
 		tlsConf := &tls.Config{
 			Certificates: []tls.Certificate{cert},
+			NextProtos:   []string{"h2"}, // We need to explicitly enable http/2 in Go 1.7+
 		}
 
 		tlsConf.BuildNameToCertificate()
