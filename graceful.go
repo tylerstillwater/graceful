@@ -1,6 +1,7 @@
 package graceful
 
 import (
+	"context"
 	"crypto/tls"
 	"log"
 	"net"
@@ -64,9 +65,13 @@ type Server struct {
 	// you to use whatever logging approach you would like
 	LogFunc func(format string, args ...interface{})
 
-	// Interrupted is true if the server is handling a SIGINT or SIGTERM
-	// signal and is thus shutting down.
+	// Interrupted is true if the server's context has canceled or
+	// the server is handling a SIGINT or SIGTERM signal is thus shutting down.
 	Interrupted bool
+
+	// Context defaults to background context.
+	// The context can be used to shutdown the server.
+	Context context.Context
 
 	// interrupt signals the listener to stop serving connections,
 	// and the server to shut down.
@@ -261,6 +266,9 @@ func (srv *Server) Serve(listener net.Listener) error {
 	if srv.ListenLimit != 0 {
 		listener = LimitListener(listener, srv.ListenLimit)
 	}
+	if srv.Context == nil {
+		srv.Context = context.Background()
+	}
 
 	// Make our stopchan
 	srv.StopChan()
@@ -301,8 +309,9 @@ func (srv *Server) Serve(listener net.Listener) error {
 	if !srv.NoSignalHandling {
 		signal.Notify(interrupt, syscall.SIGINT, syscall.SIGTERM)
 	}
+
 	quitting := make(chan struct{})
-	go srv.handleInterrupt(interrupt, quitting, listener)
+	go srv.handleInterrupt(srv.Context, interrupt, quitting, listener)
 
 	// Serve with graceful listener.
 	// Execution blocks here until listener.Close() is called, above.
@@ -418,8 +427,12 @@ func (srv *Server) interruptChan() chan os.Signal {
 	return srv.interrupt
 }
 
-func (srv *Server) handleInterrupt(interrupt chan os.Signal, quitting chan struct{}, listener net.Listener) {
-	for _ = range interrupt {
+func (srv *Server) handleInterrupt(ctx context.Context, interrupt chan os.Signal, quitting chan struct{}, listener net.Listener) {
+	for {
+		select {
+		case <-interrupt:
+		case <-ctx.Done():
+		}
 		if srv.Interrupted {
 			srv.logf("already shutting down")
 			continue
