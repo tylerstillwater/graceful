@@ -75,6 +75,9 @@ type Server struct {
 	// stopLock is used to protect against concurrent calls to Stop
 	stopLock sync.Mutex
 
+	// timeoutLock is used to protect access to srv.Timeout
+	timeoutLock sync.RWMutex
+
 	// stopChan is the channel on which callers may block while waiting for
 	// the server to stop.
 	stopChan chan struct{}
@@ -335,7 +338,9 @@ func (srv *Server) Stop(timeout time.Duration) {
 	srv.stopLock.Lock()
 	defer srv.stopLock.Unlock()
 
+	srv.timeoutLock.Lock()
 	srv.Timeout = timeout
+	srv.timeoutLock.Unlock()
 	interrupt := srv.interruptChan()
 	interrupt <- syscall.SIGINT
 }
@@ -458,10 +463,14 @@ func (srv *Server) shutdown(shutdown chan chan struct{}, kill chan struct{}) {
 	done := make(chan struct{})
 	shutdown <- done
 
-	if srv.Timeout > 0 {
+	srv.timeoutLock.RLock()
+	timeout := srv.Timeout
+	srv.timeoutLock.RUnlock()
+
+	if timeout > 0 {
 		select {
 		case <-done:
-		case <-time.After(srv.Timeout):
+		case <-time.After(timeout):
 			close(kill)
 		}
 	} else {
