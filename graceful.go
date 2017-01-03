@@ -455,6 +455,8 @@ func (srv *Server) shutdown(shutdown chan chan struct{}, kill chan struct{}) {
 	done := make(chan struct{})
 	shutdown <- done
 
+	srv.stopLock.Lock()
+	defer srv.stopLock.Unlock()
 	if srv.Timeout > 0 {
 		select {
 		case <-done:
