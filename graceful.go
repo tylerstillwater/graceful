@@ -172,10 +172,12 @@ func (srv *Server) ListenTLS(certFile, keyFile string) (net.Listener, error) {
 	}
 
 	var err error
-	config.Certificates = make([]tls.Certificate, 1)
-	config.Certificates[0], err = tls.LoadX509KeyPair(certFile, keyFile)
-	if err != nil {
-		return nil, err
+	if certFile != "" && keyFile != "" {
+		config.Certificates = make([]tls.Certificate, 1)
+		config.Certificates[0], err = tls.LoadX509KeyPair(certFile, keyFile)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	// Enable http2
