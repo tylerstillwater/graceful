@@ -5,7 +5,7 @@ Graceful is a Go 1.3+ package enabling graceful shutdown of http.Handler servers
 
 ## Using Go 1.8?
 
-If you are using Go 1.8, you may not to use this library! Consider using `http.Server`'s built-in [Shutdown()](https://golang.org/pkg/net/http/#Server.Shutdown)
+If you are using Go 1.8, you may not need to use this library! Consider using `http.Server`'s built-in [Shutdown()](https://golang.org/pkg/net/http/#Server.Shutdown)
 method for graceful shutdowns.
 
 ## Installation
