@@ -2,6 +2,7 @@ package graceful
 
 import (
 	"bytes"
+	"context"
 	"fmt"
 	"io"
 	"log"
@@ -342,6 +343,29 @@ func TestGracefulExplicitStop(t *testing.T) {
 		go srv.Serve(l)
 		time.Sleep(waitTime)
 		srv.Stop(killTime)
+	}()
+
+	// block on the stopChan until the server has shut down
+	select {
+	case <-srv.StopChan():
+	case <-time.After(timeoutTime):
+		t.Fatal("Timed out while waiting for explicit stop to complete")
+	}
+}
+
+func TestGracefulContextCancel(t *testing.T) {
+	server, l, err := createListener(1 * time.Millisecond)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	ctx, cancel := context.WithCancel(context.Background())
+	srv := &Server{Timeout: killTime, Server: server, Context: ctx}
+
+	go func() {
+		go srv.Serve(l)
+		time.Sleep(waitTime)
+		cancel()
 	}()
 
 	// block on the stopChan until the server has shut down
