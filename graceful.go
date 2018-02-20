@@ -62,6 +62,10 @@ type Server struct {
 	// you to use whatever logging approach you would like
 	LogFunc func(format string, args ...interface{})
 
+	// interruptedLock is used to protect against race conditions, where other
+	// goroutines accessing Interrupted cause a deadlock
+	interruptedLock sync.Mutex
+
 	// Interrupted is true if the server is handling a SIGINT or SIGTERM
 	// signal and is thus shutting down.
 	Interrupted bool
@@ -419,9 +423,11 @@ func (srv *Server) interruptChan() chan os.Signal {
 }
 
 func (srv *Server) handleInterrupt(interrupt chan os.Signal, quitting chan struct{}, listener net.Listener) {
-	for _ = range interrupt {
+	for range interrupt {
+		srv.interruptedLock.Lock()
 		if srv.Interrupted {
 			srv.logf("already shutting down")
+			srv.interruptedLock.Unlock()
 			continue
 		}
 		srv.logf("shutdown initiated")
@@ -429,9 +435,11 @@ func (srv *Server) handleInterrupt(interrupt chan os.Signal, quitting chan struc
 		if srv.BeforeShutdown != nil {
 			if !srv.BeforeShutdown() {
 				srv.Interrupted = false
+				srv.interruptedLock.Unlock()
 				continue
 			}
 		}
+		srv.interruptedLock.Unlock()
 
 		close(quitting)
 		srv.SetKeepAlivesEnabled(false)
