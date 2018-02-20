@@ -423,7 +423,7 @@ func (srv *Server) interruptChan() chan os.Signal {
 }
 
 func (srv *Server) handleInterrupt(interrupt chan os.Signal, quitting chan struct{}, listener net.Listener) {
-	for range interrupt {
+	for _ = range interrupt {
 		srv.interruptedLock.Lock()
 		if srv.Interrupted {
 			srv.logf("already shutting down")
