@@ -473,6 +473,10 @@ func (srv *Server) shutdown(shutdown chan chan struct{}, kill chan struct{}) {
 	srv.chanLock.Lock()
 	if srv.stopChan != nil {
 		close(srv.stopChan)
+	}else {
+		// Fix: stopChan may not init, so if shutdown finish, anyone else use StopChan to wait. it will nevery closed.
+		srv.stopChan = make(chan struct{})
+		close(srv.stopChan)
 	}
 	srv.chanLock.Unlock()
 }
