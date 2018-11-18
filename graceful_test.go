@@ -9,7 +9,6 @@ import (
 	"net/http"
 	"net/url"
 	"os"
-	"reflect"
 	"strings"
 	"sync"
 	"syscall"
@@ -284,22 +283,25 @@ func TestGracefulRunNoRequests(t *testing.T) {
 }
 
 func TestGracefulForwardsConnState(t *testing.T) {
-	var stateLock sync.Mutex
-	states := make(map[http.ConnState]int)
+	var stateNew sync.WaitGroup
+	var stateActive sync.WaitGroup
+	var stateClosed sync.WaitGroup
+
 	connState := func(conn net.Conn, state http.ConnState) {
-		stateLock.Lock()
-		states[state]++
-		stateLock.Unlock()
+		switch state {
+		case http.StateNew:
+			stateNew.Done()
+		case http.StateActive:
+			stateActive.Done()
+		case http.StateClosed:
+			stateClosed.Done()
+		default:
+			t.Errorf("Unexpected connection state: %v", state)
+		}
 	}
 
 	var wg sync.WaitGroup
 	defer wg.Wait()
-
-	expected := map[http.ConnState]int{
-		http.StateNew:    concurrentRequestN,
-		http.StateActive: concurrentRequestN,
-		http.StateClosed: concurrentRequestN,
-	}
 
 	c := make(chan os.Signal, 1)
 	server, l, err := createListener(killTime / 2)
@@ -319,15 +321,17 @@ func TestGracefulForwardsConnState(t *testing.T) {
 		srv.Serve(l)
 	}()
 
+	stateNew.Add(concurrentRequestN)
+	stateActive.Add(concurrentRequestN)
+	stateClosed.Add(concurrentRequestN)
+
 	wg.Add(1)
 	go launchTestQueries(t, &wg, c)
 	wg.Wait()
 
-	stateLock.Lock()
-	if !reflect.DeepEqual(states, expected) {
-		t.Errorf("Incorrect connection state tracking.\n  actual: %v\nexpected: %v\n", states, expected)
-	}
-	stateLock.Unlock()
+	stateNew.Wait()
+	stateActive.Wait()
+	stateClosed.Wait()
 }
 
 func TestGracefulExplicitStop(t *testing.T) {
